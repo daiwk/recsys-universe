@@ -25,7 +25,7 @@ class BaseSkill(ABC):
         self.model = model
         self.client = OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY", "EMPTY_KEY"),
-            base_url=os.environ.get("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1"),
+            base_url=os.environ.get("OPENAI_BASE_URL", "http://localhost:8000/v1"),
         )
         self.DEBUG = True
 

@@ -57,7 +57,7 @@ def run_recommendation(user_id: int, query: str) -> List[Dict[str, Any]]:
     """
     debug_log("MAIN", f"开始推荐，user_id={user_id}, query={query!r}")
     
-    coordinator = SkillsCoordinator(model="qwen3:1.7b")
+    coordinator = SkillsCoordinator(model="Qwen/Qwen3-1.7B")
     result = coordinator.run_recommendation(user_id, query)
     
     debug_log("MAIN", f"推荐完成，结果数量={len(result)}")
