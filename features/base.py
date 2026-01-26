@@ -414,25 +414,105 @@ class ItemFeatureStore:
         return basic.get("genres", [])
 
 
+class MemoryFeatureStore(BaseFeatureStore):
+    """
+    In-memory feature store for testing/demo when Redis is not available.
+    Uses Python dict for storage.
+    """
+
+    def __init__(self, config):
+        """Initialize in-memory feature store."""
+        super().__init__(config)
+        self._user_features = {}
+        self._item_features = {}
+        self._user_embeddings = {}
+        self._item_embeddings = {}
+        logger.info("MemoryFeatureStore initialized (in-memory mode)")
+
+    def get_user_features(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Get features for a user."""
+        return self._user_features.get(user_id)
+
+    def set_user_features(self, user_id: int, features: Dict[str, Any]) -> bool:
+        """Set features for a user."""
+        self._user_features[user_id] = features
+        return True
+
+    def get_item_features(self, item_id: int) -> Optional[Dict[str, Any]]:
+        """Get features for an item."""
+        return self._item_features.get(item_id)
+
+    def set_item_features(self, item_id: int, features: Dict[str, Any]) -> bool:
+        """Set features for an item."""
+        self._item_features[item_id] = features
+        return True
+
+    def batch_get_user_features(self, user_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+        """Batch get features for multiple users."""
+        return {uid: self._user_features.get(uid) for uid in user_ids if uid in self._user_features}
+
+    def batch_get_item_features(self, item_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+        """Batch get features for multiple items."""
+        return {iid: self._item_features.get(iid) for iid in item_ids if iid in self._item_features}
+
+    def get_user_embedding(self, user_id: int) -> Optional[List[float]]:
+        """Get cached user embedding."""
+        return self._user_embeddings.get(user_id)
+
+    def set_user_embedding(self, user_id: int, embedding: List[float]) -> bool:
+        """Set cached user embedding."""
+        self._user_embeddings[user_id] = embedding
+        return True
+
+    def get_item_embedding(self, item_id: int) -> Optional[List[float]]:
+        """Get cached item embedding."""
+        return self._item_embeddings.get(item_id)
+
+    def set_item_embedding(self, item_id: int, embedding: List[float]) -> bool:
+        """Set cached item embedding."""
+        self._item_embeddings[item_id] = embedding
+        return True
+
+
 # Factory functions
-def create_feature_store(config) -> RedisFeatureStore:
+def create_feature_store(config, use_memory: bool = None) -> BaseFeatureStore:
     """
     Create a feature store instance.
 
     Args:
         config: AppConfig instance
+        use_memory: If True, use memory store instead of Redis
 
     Returns:
-        RedisFeatureStore instance
+        Feature store instance (Redis or Memory)
     """
-    return RedisFeatureStore(config)
+    if use_memory is None:
+        # Check environment variable
+        use_memory = os.environ.get("RECSYS_USE_MEMORY_STORE", "").lower() in ("true", "1", "yes")
+
+    if use_memory:
+        logger.info("Using in-memory feature store (no Redis required)")
+        return MemoryFeatureStore(config)
+
+    # Try Redis, fall back to memory if not available
+    try:
+        import redis
+        # Test connection
+        store = RedisFeatureStore(config)
+        client = store._get_client()
+        client.ping()
+        logger.info("Redis feature store connected successfully")
+        return store
+    except Exception as e:
+        logger.warning(f"Redis not available ({e}), using in-memory store")
+        return MemoryFeatureStore(config)
 
 
-def create_user_feature_store(redis_store: RedisFeatureStore) -> UserFeatureStore:
+def create_user_feature_store(store: BaseFeatureStore) -> UserFeatureStore:
     """Create user feature store."""
-    return UserFeatureStore(redis_store)
+    return UserFeatureStore(store)
 
 
-def create_item_feature_store(redis_store: RedisFeatureStore) -> ItemFeatureStore:
+def create_item_feature_store(store: BaseFeatureStore) -> ItemFeatureStore:
     """Create item feature store."""
-    return ItemFeatureStore(redis_store)
+    return ItemFeatureStore(store)
