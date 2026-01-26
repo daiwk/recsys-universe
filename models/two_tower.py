@@ -54,6 +54,12 @@ class EmbeddingLayer(nn.Module if HAS_TORCH else object):
                 for _ in range(num_layers)
             ])
             self.dropout = nn.Dropout(dropout)
+            # Also create numpy fallback for non-PyTorch usage
+            np.random.seed(42)
+            self.numpy_embeddings = [
+                np.random.randn(num_buckets, embedding_dim).astype(np.float32) * 0.01
+                for _ in range(num_layers)
+            ]
         else:
             # Numpy fallback - use random vectors
             np.random.seed(42)
@@ -61,6 +67,7 @@ class EmbeddingLayer(nn.Module if HAS_TORCH else object):
                 np.random.randn(num_buckets, embedding_dim).astype(np.float32) * 0.01
                 for _ in range(num_layers)
             ]
+            self.numpy_embeddings = self.embeddings
 
     def forward(self, indices: List[int]) -> np.ndarray:
         """
@@ -72,12 +79,12 @@ class EmbeddingLayer(nn.Module if HAS_TORCH else object):
         Returns:
             Sum of embeddings from all layers
         """
-        if HAS_TORCH:
-            raise NotImplementedError("Use torch tensor input for PyTorch")
+        # Use numpy embeddings for numpy interface (works with or without PyTorch)
+        numpy_embs = getattr(self, 'numpy_embeddings', self.embeddings)
 
         # Sum embeddings from all layers
         result = np.zeros(self.embedding_dim, dtype=np.float32)
-        for emb in self.embeddings:
+        for emb in numpy_embs:
             for idx in indices:
                 result += emb[idx]
         return result / (len(indices) + 1e-8)
@@ -139,6 +146,15 @@ class DNNLayer(nn.Module if HAS_TORCH else object):
                 self.layers.append(nn.Linear(dims[i], dims[i + 1]))
             self.activation = activation
             self.dropout = nn.Dropout(dropout)
+            # Also create numpy fallback for non-PyTorch usage
+            np.random.seed(42)
+            self.weights = []
+            self.biases = []
+            for i in range(len(dims) - 1):
+                w = np.random.randn(dims[i], dims[i + 1]).astype(np.float32) * 0.01
+                b = np.zeros(dims[i + 1], dtype=np.float32)
+                self.weights.append(w)
+                self.biases.append(b)
         else:
             # Numpy fallback
             np.random.seed(42)
@@ -161,9 +177,7 @@ class DNNLayer(nn.Module if HAS_TORCH else object):
         Returns:
             Output tensor
         """
-        if HAS_TORCH:
-            raise NotImplementedError("Use torch tensor input for PyTorch")
-
+        # Use numpy weights/biases for numpy interface (works with or without PyTorch)
         for i, (w, b) in enumerate(zip(self.weights, self.biases)):
             x = np.matmul(x, w) + b
             if i < len(self.weights) - 1:  # No activation on output
