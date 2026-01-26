@@ -1,5 +1,9 @@
 """
 Skills framework for movie recommendation system
+
+Skills automatically adapt to the architecture mode set by RECSYS_ARCHITECTURE:
+- Legacy: ContentSkill uses TF-IDF, CollabSkill uses CF heuristic
+- Industrial: ContentSkill uses Vector Recall, CollabSkill uses DNN Ranking
 """
 from .base_skill import BaseSkill
 from .profile_skill import ProfileSkill
@@ -12,7 +16,7 @@ from .skill_registry import SkillRegistry
 
 __all__ = [
     'BaseSkill',
-    'ProfileSkill', 
+    'ProfileSkill',
     'ContentSkill',
     'CollabSkill',
     'MergeSkill',

@@ -57,10 +57,10 @@ def run_recommendation(
     logger.info(f"开始推荐，user_id={user_id}, industrial={industrial}")
 
     if industrial:
-        # Industrial pipeline
-        from industrial_coordinator import IndustrialSkillsCoordinator
-        coordinator = IndustrialSkillsCoordinator()
-        return coordinator.run_recommendation(user_id, query, industrial=True)
+        # Industrial pipeline: use Skills framework with industrial recall/rank
+        from skills_coordinator import SkillsCoordinator
+        coordinator = SkillsCoordinator(model=config.llm.model)
+        return coordinator.run_recommendation(user_id, query)
     else:
         # Legacy pipeline (TF-IDF + LLM)
         from skills_coordinator import SkillsCoordinator
