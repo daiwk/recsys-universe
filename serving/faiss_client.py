@@ -71,9 +71,9 @@ class FaissClient:
 
             if metric == 'COSINE':
                 # Use inner product for cosine similarity with normalized vectors
-                metric_type = faiss.METRIC_INNER_PRODUCT
+                metric_type = self.faiss.METRIC_INNER_PRODUCT
             else:
-                metric_type = faiss.METRIC_L2
+                metric_type = self.faiss.METRIC_L2
 
             nlist = getattr(self.config, 'nlist', 100) if self.config else 100
 
@@ -81,12 +81,12 @@ class FaissClient:
             # For small datasets (<10000), use flat index
             if nlist > 0 and nlist < 100:
                 # Flat index (exact search, good for small datasets)
-                self.index = faiss.IndexFlatIP(dim) if metric == 'COSINE' else faiss.IndexFlatL2(dim)
+                self.index = self.faiss.IndexFlatIP(dim) if metric == 'COSINE' else self.faiss.IndexFlatL2(dim)
                 logger.info(f"Using IndexFlat{'(IP)' if metric == 'COSINE' else 'L2'} (exact search)")
             else:
                 # IVF index (approximate search, better for large datasets)
-                quantizer = faiss.IndexFlatIP(dim) if metric == 'COSINE' else faiss.IndexFlatL2(dim)
-                self.index = faiss.IndexIVFFlat(quantizer, dim, min(nlist, 100), metric_type)
+                quantizer = self.faiss.IndexFlatIP(dim) if metric == 'COSINE' else self.faiss.IndexFlatL2(dim)
+                self.index = self.faiss.IndexIVFFlat(quantizer, dim, min(nlist, 100), metric_type)
                 logger.info(f"Using IndexIVFFlat (approximate search, nlist={min(nlist, 100)})")
 
             self._is_built = True
@@ -197,7 +197,7 @@ class FaissClient:
                     item_ids.append(self.id_map[idx])
                     # Convert distance to similarity score
                     if hasattr(self.index, 'metric_type'):
-                        if self.index.metric_type == faiss.METRIC_INNER_PRODUCT:
+                        if self.index.metric_type == self.faiss.METRIC_INNER_PRODUCT:
                             scores.append(float(dist))  # Already similarity score
                         else:
                             scores.append(float(1.0 / (1.0 + dist)))  # Convert distance to score
