@@ -75,19 +75,19 @@ class FaissClient:
             else:
                 metric_type = self.faiss.METRIC_L2
 
-            nlist = getattr(self.config, 'nlist', 100) if self.config else 100
+            nlist = getattr(self.config, 'nlist', 0) if self.config else 0
 
-            # Use IVF index for better performance with large datasets
-            # For small datasets (<10000), use flat index
-            if nlist > 0 and nlist < 100:
-                # Flat index (exact search, good for small datasets)
+            # Use flat index for small datasets or when nlist <= 0
+            # Use IVF index only for large datasets (nlist >= 100) for better performance
+            if nlist <= 0 or nlist < 100:
+                # Flat index (exact search, good for small datasets, most stable)
                 self.index = self.faiss.IndexFlatIP(dim) if metric == 'COSINE' else self.faiss.IndexFlatL2(dim)
                 logger.info(f"Using IndexFlat{'(IP)' if metric == 'COSINE' else 'L2'} (exact search)")
             else:
                 # IVF index (approximate search, better for large datasets)
                 quantizer = self.faiss.IndexFlatIP(dim) if metric == 'COSINE' else self.faiss.IndexFlatL2(dim)
-                self.index = self.faiss.IndexIVFFlat(quantizer, dim, min(nlist, 100), metric_type)
-                logger.info(f"Using IndexIVFFlat (approximate search, nlist={min(nlist, 100)})")
+                self.index = self.faiss.IndexIVFFlat(quantizer, dim, min(nlist, 1000), metric_type)
+                logger.info(f"Using IndexIVFFlat (approximate search, nlist={min(nlist, 1000)})")
 
             self._is_built = True
             logger.info("FAISS index initialized successfully")
