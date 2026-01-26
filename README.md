@@ -4,30 +4,21 @@
 
 **核心特性**: 保留 Skills 编排框架，将传统 TF-IDF/协同过滤替换为工业级双塔召回 + 精排。
 
-## Skills 架构演进
+## 架构概览
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Skills 架构流程                              │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
 │  ┌─────────┐    ┌──────────┐    ┌─────────┐    ┌───────┐       │
 │  │ Profile │───>│ Content  │───>│  Collab │───>│ Final │       │
 │  │ Skill   │    │ Skill    │    │  Skill  │    │ Skill │       │
 │  └─────────┘    └──────────┘    └─────────┘    └───────┘       │
-│       │             │               │               │          │
-│       v             v               v               v          │
-│   用户画像      TF-IDF召回      协同过滤        结果生成       │
-│                  ↓               ↓                            │
-│              向量召回         精排排序                         │
-│            (双塔+Milvus)    (DNN+CTR)                         │
 │                                                                 │
+│  Legacy模式: TF-IDF召回 → 协同过滤 → LLM生成                      │
+│  Industrial模式: 向量召回(双塔+Milvus) → 精排(DNN+CTR)           │
 └─────────────────────────────────────────────────────────────────┘
 ```
-
-**两种模式**:
-- **Legacy**: Content=TF-IDF, Collab=协同过滤 (需要 LLM)
-- **Industrial**: Content=向量召回, Collab=精排排序 (无需 LLM)
 
 ## 快速开始
 
@@ -37,72 +28,84 @@
 pip install -r requirements.txt
 
 # 可选依赖
-pip install torch          # GPU 加速模型训练
+pip install torch          # GPU 加速
 pip install pymilvus       # Milvus 向量检索
 pip install redis          # Redis 特征存储
 ```
 
-### 2. 配置环境变量
+### 2. 下载 MovieLens 数据集
 
 ```bash
-# 工业级模式配置
-export RECSYS_ARCHITECTURE=industrial
+# 下载 MovieLens-1M (约 24MB)
+wget https://files.grouplens.org/datasets/movielens/ml-1m.zip
 
-# Legacy 模式需要 LLM
-export OPENAI_API_KEY="your_api_key"
-export OPENAI_BASE_URL="http://localhost:8000/v1"
-export RECSYS_DEBUG="false"
-
-# 内存存储模式 (无需 Redis/Milvus)
-export RECSYS_USE_MEMORY_STORE=true
-
-# Redis 配置
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-
-# Milvus 配置
-export MILVUS_HOST=localhost
-export MILVUS_PORT=19530
+# 解压到项目根目录
+unzip ml-1m.zip -d .
+# 解压后会得到 ml-1m/ 目录，包含:
+#   - movies.dat    (电影信息)
+#   - ratings.dat   (评分数据)
+#   - users.dat     (用户信息)
 ```
 
-### 3. 数据导入 (Industrial 模式)
+### 3. 数据导入
 
-在使用 Industrial 模式之前，需要先将 MovieLens 数据导入 Redis 和 Milvus：
+根据运行环境选择以下方式之一：
+
+#### 方式 A: 完整服务 (Redis + Milvus)
+
+需要先启动 Redis 和 Milvus 服务：
 
 ```bash
-# 设置数据路径 (解压后的 ml-1m 目录)
-export MOVIELENS_PATH=./ml-1m
+# 启动 Redis (默认端口 6379)
+redis-server
+
+# 启动 Milvus (默认端口 19530)
+# 可以使用 Docker: docker run -d --name milvus-standalone ...
 
 # 导入数据到 Redis + Milvus
+export MOVIELENS_PATH=./ml-1m
 python scripts/ingest_data.py
-
-# 或者使用内存存储模式 (无需 Redis/Milvus)
-python scripts/ingest_data.py --memory
-
-# 仅重建 Milvus 索引
-python scripts/ingest_data.py --rebuild-index
 ```
 
-### 4. 运行
+#### 方式 B: 内存模式 (无需外部服务)
 
-**Legacy 模式 (TF-IDF + LLM):**
 ```bash
-python multiagents_movielens.py --legacy
+# 使用内存存储模式，不需要 Redis/Milvus
+export MOVIELENS_PATH=./ml-1m
+python scripts/ingest_data.py --memory
 ```
 
-**Industrial 模式 (双塔 + 精排):**
+### 4. 运行推荐系统
+
+#### Industrial 模式 (推荐)
+
+**使用已导入的数据:**
 ```bash
 python multiagents_movielens.py --industrial
 ```
 
-**纯工业级演示 (内存模式):**
+**纯演示模式 (无需数据导入):**
 ```bash
+# 内存模式下直接运行演示
 RECSYS_USE_MEMORY_STORE=true python multiagents_movielens.py --demo-industrial
+```
+
+#### Legacy 模式
+
+需要配置 LLM (如本地 Qwen 模型):
+
+```bash
+export RECSYS_ARCHITECTURE=legacy
+export OPENAI_API_KEY="your_api_key"
+export OPENAI_BASE_URL="http://localhost:8000/v1"
+
+python multiagents_movielens.py --legacy
 ```
 
 ### 5. API 服务
 
 ```bash
+# 启动 API 服务
 python serving/api_server.py --port 8080
 ```
 
@@ -112,32 +115,45 @@ python serving/api_server.py --port 8080
 - `POST /rank` - 排序
 - `POST /recommend` - 召回 + 排序
 
+## 环境变量配置
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `RECSYS_ARCHITECTURE` | `legacy` | 架构模式: `legacy` 或 `industrial` |
+| `RECSYS_USE_MEMORY_STORE` | `false` | 是否使用内存存储 (无需 Redis) |
+| `RECSYS_DEBUG` | `false` | 调试模式 |
+| `MOVIELENS_PATH` | `ml-1m` | MovieLens 数据路径 |
+| `OPENAI_API_KEY` | - | Legacy 模式需要的 API Key |
+| `OPENAI_BASE_URL` | `http://localhost:8000/v1` | LLM 服务地址 |
+| `REDIS_HOST` | `localhost` | Redis 地址 |
+| `REDIS_PORT` | `6379` | Redis 端口 |
+| `MILVUS_HOST` | `localhost` | Milvus 地址 |
+| `MILVUS_PORT` | `19530` | Milvus 端口 |
+
 ## 项目结构
 
 ```
 recsys-universe/
 ├── config.py                    # 统一配置管理
-├── multiagents_movielens.py     # 主入口（支持双架构）
-├── industrial_coordinator.py    # 工业级协调器（新）
-├── skills_coordinator.py        # 传统 Skills 协调器
+├── multiagents_movielens.py     # 主入口
+├── skills_coordinator.py        # Skills 协调器
 │
-├── skills/                      # 传统 Skills
+├── skills/                      # Skills 框架
 │   ├── base_skill.py            # BaseSkill 基类
-│   ├── skill_registry.py        # Skill 注册表
-│   ├── planner_skill.py         # 规划调度技能
 │   ├── profile_skill.py         # 用户画像技能
-│   ├── content_skill.py         # TF-IDF 检索
-│   ├── collab_skill.py          # 协同过滤技能
+│   ├── content_skill.py         # Content检索 (TF-IDF/向量双模式)
+│   ├── collab_skill.py          # Collab排序 (CF/精排双模式)
 │   ├── merge_skill.py           # 候选合并技能
 │   ├── final_skill.py           # 最终推荐技能
-│   └── vector_recall_skill.py   # 向量召回（新）
+│   ├── planner_skill.py         # 规划调度技能
+│   └── skill_registry.py        # Skill 注册表
 │
 ├── models/                      # 推荐模型
 │   ├── two_tower.py             # 双塔召回模型
 │   └── ranking_model.py         # 精排模型
 │
 ├── features/                    # 特征工程
-│   ├── base.py                  # 特征存储（Redis）
+│   ├── base.py                  # 特征存储 (Redis/Memory)
 │   ├── user_features.py         # 用户特征
 │   ├── item_features.py         # 物品特征
 │   └── cross_features.py        # 交叉特征
@@ -148,109 +164,63 @@ recsys-universe/
 │   ├── rank_service.py          # 排序服务
 │   └── api_server.py            # HTTP API
 │
-├── training/                    # 在线学习
-│   ├── online_learner.py        # 在线学习模块
-│   └── streaming.py             # 流式处理
+├── scripts/                     # 脚本工具
+│   └── ingest_data.py           # 数据导入脚本
 │
-└── tests/                       # 单元测试
+└── training/                    # 在线学习
+    └── online_learner.py        # 在线学习模块
 ```
 
-## 配置说明
+## 脚本使用说明
 
-所有配置通过 `config.py` 管理：
+### ingest_data.py - 数据导入
 
-| 配置项 | 环境变量 | 默认值 | 说明 |
-|--------|----------|--------|------|
-| `architecture_mode` | `RECSYS_ARCHITECTURE` | `industrial` | 架构模式 |
-| `debug` | `RECSYS_DEBUG` | `false` | 调试模式 |
-| `recall.recall_top_k` | - | `100` | 召回数量 |
-| `rank.rank_top_k` | - | `10` | 排序数量 |
-| `model.two_tower.user_embedding_dim` | - | `32` | 用户向量维度 |
-| `model.two_tower.item_embedding_dim` | - | `32` | 物品向量维度 |
-| `model.two_tower.num_hash_buckets` | - | `1000000` | Hash bucket 数 |
-| `milvus.host` | `MILVUS_HOST` | `localhost` | Milvus 地址 |
-| `redis.host` | `REDIS_HOST` | `localhost` | Redis 地址 |
+```bash
+# 导入到 Redis + Milvus
+python scripts/ingest_data.py
 
-## 工业级架构详解
+# 使用内存存储模式
+python scripts/ingest_data.py --memory
 
-### 双塔召回 (Two-Tower Retrieval)
+# 仅重建 Milvus 索引
+python scripts/ingest_data.py --rebuild-index
 
-```
-User Tower:                    Item Tower:
-┌─────────────────┐           ┌─────────────────┐
-│ ID Features     │           │ ID Features     │
-│ - user_id (Hash)│           │ - item_id (Hash)│
-│ - genres        │           │ - genres        │
-├─────────────────┤           ├─────────────────┤
-│ Embedding Layer │           │ Embedding Layer │
-│ (亿级ID → 64维) │           │ (亿级ID → 64维) │
-├─────────────────┤           ├─────────────────┤
-│ DNN Layers      │           │ DNN Layers      │
-│ (128→64→32)     │           │ (128→64→32)     │
-├─────────────────┤           ├─────────────────┐
-│ User Vector     │           │ Item Vector     │
-│ (32维)          │           │ (32维)          │
-└─────────────────┘           └─────────────────┘
+# 指定数据路径
+python scripts/ingest_data.py --data-path /path/to/ml-1m
 ```
 
-### 精排模型 (Ranking Model)
+## 两种模式对比
 
-输入特征:
-- 用户特征 (User Tower Output)
-- 物品特征 (Item Tower Output)
-- 交叉特征 (user-item interactions)
-
-模型结构:
-- DNN (256→128→64→1)
-- 输出: CTR 预测
-
-### 向量检索 (Milvus)
-
-- 索引类型: IVF_PQ (支持亿级向量)
-- 距离度量: COSINE
-- 离线: Item Embeddings → Milvus
-- 在线: User Embedding → Milvus Search → Top-100 Items
-
-### 在线学习
-
-- 实时事件流处理
-- 特征增量更新
-- 模型在线微调
+| 特性 | Legacy | Industrial |
+|------|--------|------------|
+| 召回方式 | TF-IDF 文本匹配 | 向量相似度检索 |
+| 排序 | 协同过滤启发式 | DNN CTR 预测 |
+| 外部依赖 | LLM 服务 | Redis + Milvus |
+| 推荐理由 | LLM 生成 | CTR 分数 |
+| ID 规模 | 万级 | 亿级 (Hash 桶) |
+| 推理延迟 | 高 (LLM 延迟) | 低 (< 50ms) |
+| 冷启动 | 差 | 一般 |
 
 ## 测试
 
 ```bash
+# 运行所有测试
 pytest tests/ -v
+
+# 运行特定测试
+pytest tests/test_config.py -v
 ```
 
-## 与原系统对比
+## 常见问题
 
-| 特性 | Legacy (TF-IDF) | Industrial (双塔+精排) |
-|------|-----------------|----------------------|
-| 召回方式 | TF-IDF 文本匹配 | 向量相似度检索 |
-| 排序 | LLM 生成 | DNN CTR 预测 |
-| ID 规模 | 万级 | 亿级 |
-| 推理延迟 | 高 (LLM) | 低 |
-| 在线学习 | 不支持 | 支持 |
-| 冷启动 | 差 | 一般 |
+**Q: 内存模式下运行报错?**
+A: 确保设置了 `RECSYS_USE_MEMORY_STORE=true`
 
-## 更新日志
+**Q: Industrial 模式找不到数据?**
+A: 需要先运行 `python scripts/ingest_data.py` 导入数据
 
-### v3.0.0 (工业级架构)
+**Q: Legacy 模式需要什么?**
+A: 需要配置有效的 LLM 服务 (OpenAI 兼容接口)
 
-- 新增双塔召回模型 (`models/two_tower.py`)
-- 新增精排模型 (`models/ranking_model.py`)
-- 新增特征存储层 (`features/`) - Redis 实时特征
-- 新增 Milvus 集成 (`serving/milvus_client.py`)
-- 新增召回服务 (`serving/recall_service.py`)
-- 新增排序服务 (`serving/rank_service.py`)
-- 新增 API 服务 (`serving/api_server.py`)
-- 新增在线学习模块 (`training/online_learner.py`)
-- 新增工业级协调器 (`industrial_coordinator.py`)
-- 支持双架构切换 (Legacy / Industrial)
-
-### v2.0.0
-
-- 新增统一配置管理
-- 重构 Skills 协调器
-- 完善单元测试
+**Q: 如何切换模式?**
+A: 设置环境变量 `export RECSYS_ARCHITECTURE=industrial` 或直接使用 `--industrial/--legacy` 参数
