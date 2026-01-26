@@ -47,9 +47,38 @@ export RECSYS_ARCHITECTURE=industrial
 export OPENAI_API_KEY="your_api_key"
 export OPENAI_BASE_URL="http://localhost:8000/v1"
 export RECSYS_DEBUG="false"
+
+# 内存存储模式 (无需 Redis/Milvus)
+export RECSYS_USE_MEMORY_STORE=true
+
+# Redis 配置
+export REDIS_HOST=localhost
+export REDIS_PORT=6379
+
+# Milvus 配置
+export MILVUS_HOST=localhost
+export MILVUS_PORT=19530
 ```
 
-### 3. 运行
+### 3. 数据导入 (Industrial 模式)
+
+在使用 Industrial 模式之前，需要先将 MovieLens 数据导入 Redis 和 Milvus：
+
+```bash
+# 设置数据路径 (解压后的 ml-1m 目录)
+export MOVIELENS_PATH=./ml-1m
+
+# 导入数据到 Redis + Milvus
+python scripts/ingest_data.py
+
+# 或者使用内存存储模式 (无需 Redis/Milvus)
+python scripts/ingest_data.py --memory
+
+# 仅重建 Milvus 索引
+python scripts/ingest_data.py --rebuild-index
+```
+
+### 4. 运行
 
 **Legacy 模式 (TF-IDF + LLM):**
 ```bash
@@ -61,12 +90,12 @@ python multiagents_movielens.py --legacy
 python multiagents_movielens.py --industrial
 ```
 
-**纯工业级演示:**
+**纯工业级演示 (内存模式):**
 ```bash
-python multiagents_movielens.py --demo-industrial
+RECSYS_USE_MEMORY_STORE=true python multiagents_movielens.py --demo-industrial
 ```
 
-### 4. API 服务
+### 5. API 服务
 
 ```bash
 python serving/api_server.py --port 8080
