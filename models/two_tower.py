@@ -215,7 +215,7 @@ class UserTower(nn.Module if HAS_TORCH else object):
             config: TwoTowerConfig
         """
         super().__init__()
-        two_tower = config.two_tower
+        two_tower = config.model.two_tower
 
         self.embedding_dim = two_tower.user_embedding_dim
         self.hasher_num_buckets = two_tower.num_hash_buckets
@@ -335,7 +335,7 @@ class ItemTower(nn.Module if HAS_TORCH else object):
             config: TwoTowerConfig
         """
         super().__init__()
-        two_tower = config.two_tower
+        two_tower = config.model.two_tower
 
         self.embedding_dim = two_tower.item_embedding_dim
 
@@ -458,8 +458,8 @@ class TwoTowerModel:
 
         logger.info(
             f"TwoTowerModel initialized with "
-            f"user_dim={config.two_tower.user_embedding_dim}, "
-            f"item_dim={config.two_tower.item_embedding_dim}"
+            f"user_dim={config.model.two_tower.user_embedding_dim}, "
+            f"item_dim={config.model.two_tower.item_embedding_dim}"
         )
 
     def get_user_embedding(
