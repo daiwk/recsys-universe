@@ -121,12 +121,14 @@ class RecallService:
 
     def _get_behavior_hashes(self, user_id: int) -> List[int]:
         """Get hashed behavior features for user."""
+        from features.base import FeatureHasher
         genres = self.user_features.store.get_history_genres(user_id)
         hasher = FeatureHasher(num_buckets=self.config.model.two_tower.num_hash_buckets)
         return [hasher.hash(g) for g in genres]
 
     def _get_item_hashes(self, item_id: int) -> List[int]:
         """Get hashed item features."""
+        from features.base import FeatureHasher
         genres = self.item_features.store.get_genres(item_id)
         hasher = FeatureHasher(num_buckets=self.config.model.two_tower.num_hash_buckets)
         return [hasher.hash(g) for g in genres]
