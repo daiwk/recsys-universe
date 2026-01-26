@@ -404,24 +404,21 @@ def main():
         logger.info("Index rebuild complete!")
         return
 
-    # Ingest to Redis
-    if not args.skip_redis and not use_memory:
-        ingest_to_redis(data, feature_store, user_features, item_features)
+    # Ingest to feature store (Redis or Memory)
+    logger.info(f"Ingesting data to {'memory' if use_memory else 'Redis'} store...")
+    ingest_to_redis(data, feature_store, user_features, item_features)
 
     # Generate item embeddings and build FAISS index
-    if not use_memory:
-        logger.info("Initializing Two-Tower model...")
-        two_tower = TwoTowerModel(config)
+    logger.info("Initializing Two-Tower model...")
+    two_tower = TwoTowerModel(config)
 
-        logger.info("Initializing FAISS...")
-        faiss = get_faiss_client(config.recall.faiss)
+    logger.info("Initializing FAISS...")
+    faiss = get_faiss_client(config.recall.faiss)
 
-        generate_item_embeddings(data, two_tower, item_features, faiss)
+    generate_item_embeddings(data, two_tower, item_features, faiss)
 
-        # Pre-compute user embeddings
-        build_user_embeddings(data, two_tower, user_features)
-    else:
-        logger.info("Skipping FAISS (memory mode)")
+    # Pre-compute user embeddings
+    build_user_embeddings(data, two_tower, user_features)
 
     logger.info("=" * 50)
     logger.info("Data ingestion complete!")
