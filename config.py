@@ -10,16 +10,18 @@ from typing import Optional
 @dataclass
 class LLMConfig:
     """LLM configuration settings."""
-    api_key: str = ""
-    base_url: str = "http://localhost:8000/v1"
+    api_key: Optional[str] = None  # Use None as sentinel
+    base_url: Optional[str] = None
     model: str = "Qwen/Qwen3-1.7B"
     temperature: float = 0.3
     max_tokens: Optional[int] = None
 
     def __post_init__(self):
-        # Override with environment variables if set
-        self.api_key = os.environ.get("OPENAI_API_KEY", self.api_key)
-        self.base_url = os.environ.get("OPENAI_BASE_URL", self.base_url)
+        # Override with environment variables only if not explicitly set
+        if self.api_key is None:
+            self.api_key = os.environ.get("OPENAI_API_KEY", "")
+        if self.base_url is None:
+            self.base_url = os.environ.get("OPENAI_BASE_URL", "http://localhost:8000/v1")
 
 
 @dataclass
@@ -53,12 +55,15 @@ class AppConfig:
 def get_config() -> AppConfig:
     """
     Get the application configuration.
+    Returns a cached singleton instance.
 
     Returns:
         AppConfig instance with all settings
     """
-    return AppConfig()
+    if not hasattr(get_config, "_instance"):
+        get_config._instance = AppConfig()
+    return get_config._instance
 
 
-# Global config instance
-config = get_config()
+# Global config instance (lazy initialization)
+config = None  # Will be initialized on first access
