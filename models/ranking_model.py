@@ -39,24 +39,23 @@ class DNNRanker(nn.Module if HAS_TORCH else object):
         self.activation = ranking.activation
         self.dropout = ranking.dropout
 
+        # Always initialize numpy weights for fallback
+        np.random.seed(42)
+        dims = ranking.dnn_layers
+        self.weights = []
+        self.biases = []
+        for i in range(len(dims) - 1):
+            # Xavier initialization
+            w = np.random.randn(dims[i], dims[i + 1]).astype(np.float32) * np.sqrt(2.0 / dims[i])
+            b = np.zeros(dims[i + 1], dtype=np.float32)
+            self.weights.append(w)
+            self.biases.append(b)
+
         if HAS_TORCH:
             # Build PyTorch layers
-            dims = ranking.dnn_layers
             self.layers = nn.ModuleList()
             for i in range(len(dims) - 1):
                 self.layers.append(nn.Linear(dims[i], dims[i + 1]))
-        else:
-            # Numpy fallback
-            np.random.seed(42)
-            dims = ranking.dnn_layers
-            self.weights = []
-            self.biases = []
-            for i in range(len(dims) - 1):
-                # Xavier initialization
-                w = np.random.randn(dims[i], dims[i + 1]).astype(np.float32) * np.sqrt(2.0 / dims[i])
-                b = np.zeros(dims[i + 1], dtype=np.float32)
-                self.weights.append(w)
-                self.biases.append(b)
 
     def forward(self, x: np.ndarray) -> np.ndarray:
         """
