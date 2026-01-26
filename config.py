@@ -111,8 +111,8 @@ class RankingConfig:
     item_feature_dim: int = 64
     cross_feature_dim: int = 128
 
-    # Model layers
-    dnn_layers: List[int] = field(default_factory=lambda: [256, 128, 64, 1])
+    # Model layers - input dim should match actual feature count (user:6 + item:6 + cross:8 = 20)
+    dnn_layers: List[int] = field(default_factory=lambda: [20, 64, 32, 1])
     activation: str = "relu"
     dropout: float = 0.2
 

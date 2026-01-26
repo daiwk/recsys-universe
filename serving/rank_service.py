@@ -21,23 +21,25 @@ class RankService:
     Ranking service for CTR prediction.
     """
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, feature_store=None, ranking_model=None):
         """
         Initialize ranking service.
 
         Args:
             config: AppConfig (uses global if not provided)
+            feature_store: Optional shared feature store
+            ranking_model: Optional shared ranking model
         """
         self.config = config or get_config()
 
-        # Initialize components
-        self.feature_store = create_feature_store(self.config)
+        # Initialize components (use provided or create new)
+        self.feature_store = feature_store if feature_store is not None else create_feature_store(self.config)
         self.user_features = UserFeatures(self.feature_store)
         self.item_features = ItemFeatures(self.feature_store)
         self.cross_features = CrossFeatures(self.user_features, self.item_features)
 
-        # Initialize ranking model
-        self.ranking_model = RankingModel(self.config)
+        # Initialize ranking model (use provided or create new)
+        self.ranking_model = ranking_model if ranking_model is not None else RankingModel(self.config)
 
         logger.info("RankService initialized")
 

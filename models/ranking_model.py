@@ -16,6 +16,7 @@ try:
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
+    torch = None  # For type hints
     logger.warning("PyTorch not installed, using numpy implementation")
 
 
@@ -81,7 +82,7 @@ class DNNRanker(nn.Module if HAS_TORCH else object):
                     x = 1 / (1 + np.exp(-x))
         return x
 
-    def forward_torch(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_torch(self, x: "torch.Tensor") -> "torch.Tensor":
         """
         Forward pass for PyTorch implementation.
 

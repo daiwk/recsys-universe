@@ -360,6 +360,18 @@ class UserFeatureStore:
         """Get user embedding for recall."""
         return self.store.get_user_embedding(user_id)
 
+    def set_user_embedding(self, user_id: int, embedding: List[float]) -> bool:
+        """Set user embedding for recall."""
+        return self.store.set_user_embedding(user_id, embedding)
+
+    def get_user_features(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Get user features."""
+        return self.store.get_user_features(user_id)
+
+    def set_user_features(self, user_id: int, features: Dict[str, Any]) -> bool:
+        """Set user features."""
+        return self.store.set_user_features(user_id, features)
+
     def update_behavior(self, user_id: int, behavior: Dict[str, Any]) -> bool:
         """Update user behavior features."""
         existing = self.store.get_user_features(user_id) or {}
@@ -413,6 +425,14 @@ class ItemFeatureStore:
         """Get genres for an item."""
         basic = self.get_basic_features(item_id)
         return basic.get("genres", [])
+
+    def set_item_features(self, item_id: int, features: Dict[str, Any]) -> bool:
+        """Set item features."""
+        return self.store.set_item_features(item_id, features)
+
+    def get_item_features(self, item_id: int) -> Optional[Dict[str, Any]]:
+        """Get item features."""
+        return self.store.get_item_features(item_id)
 
     def set_item_embedding(self, item_id: int, embedding: List[float]) -> bool:
         """Set item embedding for recall."""

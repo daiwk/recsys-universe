@@ -193,6 +193,19 @@ class ItemFeatures:
         views = stats.get('views', 0)
         return min(views / 100000.0, 1.0)  # Normalize by 100K
 
+    def update_statistics(self, item_id: int, stats: Dict[str, Any]) -> bool:
+        """
+        Update item statistics.
+
+        Args:
+            item_id: Item ID
+            stats: Statistics dict to update
+
+        Returns:
+            True if successful
+        """
+        return self.store.update_statistics(item_id, stats)
+
 
 class ItemFeatureBuilder:
     """Builder for creating item feature records."""

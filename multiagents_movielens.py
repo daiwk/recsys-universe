@@ -127,11 +127,69 @@ def demo_industrial_only():
     纯工业级演示（不需要 LLM）。
     """
     print("[DEMO] 运行纯工业级推荐流程...")
-    print("注意：需要先运行 build_index() 构建向量索引\n")
 
     from industrial_coordinator import IndustrialSkillsCoordinator
+    from scripts.ingest_data import (
+        load_movielens_data,
+        ingest_to_redis,
+        generate_item_embeddings,
+        build_user_embeddings,
+    )
+    from config import get_config
+    from features.base import MemoryFeatureStore
+    from features.user_features import UserFeatures
+    from features.item_features import ItemFeatures
+    from models.two_tower import TwoTowerModel
+    from serving.faiss_client import get_faiss_client
 
-    coordinator = IndustrialSkillsCoordinator()
+    # 检查是否需要导入数据
+    print("[DEMO] 检查数据状态...")
+
+    config = get_config()
+    feature_store = MemoryFeatureStore(config)
+    user_features = UserFeatures(feature_store)
+    item_features = ItemFeatures(feature_store)
+
+    # 初始化模型和 FAISS 客户端（后面会根据需要使用）
+    two_tower = None
+    faiss = None
+
+    # 检查是否有数据
+    sample_user = user_features.store.get_user_features(1)
+    if sample_user is None:
+        print("[DEMO] 数据未导入，开始导入...")
+        try:
+            data = load_movielens_data()
+            print(f"[DEMO] 加载数据: {len(data['users'])} 用户, {len(data['items'])} 物品, {len(data['ratings'])} 评分")
+
+            # 导入数据
+            ingest_to_redis(data, feature_store, user_features, item_features)
+            print("[DEMO] 数据导入完成")
+
+            # 生成 embeddings
+            print("[DEMO] 生成 embeddings...")
+            two_tower = TwoTowerModel(config)
+            faiss = get_faiss_client(config.recall.faiss)
+            generate_item_embeddings(data, two_tower, item_features, faiss)
+            build_user_embeddings(data, two_tower, user_features)
+            print("[DEMO] embeddings 生成完成")
+        except FileNotFoundError:
+            print("[DEMO] 错误: 未找到 MovieLens 数据。请先运行: python scripts/ingest_data.py --memory")
+            return
+    else:
+        print("[DEMO] 数据已存在，跳过导入")
+        # 数据已存在时，也需要初始化模型和 FAISS
+        two_tower = TwoTowerModel(config)
+        faiss = get_faiss_client(config.recall.faiss)
+
+    # 现在创建 coordinator，传入共享的组件
+    print("\n[DEMO] 初始化推荐服务...")
+    coordinator = IndustrialSkillsCoordinator(
+        feature_store=feature_store,
+        two_tower=two_tower,
+        ranking_model=None,
+        faiss_client=faiss
+    )
 
     # 检查健康状态
     health = coordinator.health_check()

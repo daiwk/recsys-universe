@@ -23,26 +23,29 @@ class RecallService:
     Combines Two-Tower model with FAISS vector search.
     """
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, feature_store=None, two_tower=None, faiss_client=None):
         """
         Initialize recall service.
 
         Args:
             config: AppConfig (uses global if not provided)
+            feature_store: Optional shared feature store
+            two_tower: Optional shared TwoTower model
+            faiss_client: Optional shared FAISS client
         """
         self.config = config or get_config()
 
-        # Initialize components
-        self.feature_store = create_feature_store(self.config)
+        # Initialize components (use provided or create new)
+        self.feature_store = feature_store if feature_store is not None else create_feature_store(self.config)
         self.user_features = UserFeatures(self.feature_store)
         self.item_features = ItemFeatures(self.feature_store)
         self.cross_features = CrossFeatures(self.user_features, self.item_features)
 
-        # Initialize model
-        self.two_tower = TwoTowerModel(self.config)
+        # Initialize model (use provided or create new)
+        self.two_tower = two_tower if two_tower is not None else TwoTowerModel(self.config)
 
-        # Initialize FAISS client
-        self.faiss = get_faiss_client(self.config.recall.faiss)
+        # Initialize FAISS client (use provided or create new)
+        self.faiss = faiss_client if faiss_client is not None else get_faiss_client(self.config.recall.faiss)
 
         logger.info("RecallService initialized")
 

@@ -16,6 +16,7 @@ try:
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
+    torch = None  # For type hints
     logger.warning("PyTorch not installed, using numpy implementation")
 
 
@@ -89,7 +90,7 @@ class EmbeddingLayer(nn.Module if HAS_TORCH else object):
                 result += emb[idx]
         return result / (len(indices) + 1e-8)
 
-    def forward_torch(self, indices: torch.Tensor) -> torch.Tensor:
+    def forward_torch(self, indices: "torch.Tensor") -> "torch.Tensor":
         """
         Forward pass for PyTorch implementation.
 
@@ -158,6 +159,7 @@ class DNNLayer(nn.Module if HAS_TORCH else object):
         else:
             # Numpy fallback
             np.random.seed(42)
+            self.activation = activation
             self.weights = []
             self.biases = []
             dims = [input_dim] + hidden_dims
@@ -189,7 +191,7 @@ class DNNLayer(nn.Module if HAS_TORCH else object):
                     x = 1 / (1 + np.exp(-x))
         return x
 
-    def forward_torch(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_torch(self, x: "torch.Tensor") -> "torch.Tensor":
         """
         Forward pass for PyTorch implementation.
 
@@ -306,9 +308,9 @@ class UserTower(nn.Module if HAS_TORCH else object):
 
     def forward_torch(
         self,
-        user_id_hash: torch.Tensor,
-        behavior_hashes: torch.Tensor
-    ) -> torch.Tensor:
+        user_id_hash: "torch.Tensor",
+        behavior_hashes: "torch.Tensor"
+    ) -> "torch.Tensor":
         """
         Forward pass for PyTorch implementation.
 
@@ -425,9 +427,9 @@ class ItemTower(nn.Module if HAS_TORCH else object):
 
     def forward_torch(
         self,
-        item_id_hash: torch.Tensor,
-        genre_hashes: torch.Tensor
-    ) -> torch.Tensor:
+        item_id_hash: "torch.Tensor",
+        genre_hashes: "torch.Tensor"
+    ) -> "torch.Tensor":
         """
         Forward pass for PyTorch implementation.
 

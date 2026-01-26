@@ -15,6 +15,7 @@ from models.two_tower import TwoTowerModel
 from models.ranking_model import RankingModel
 from serving.recall_service import RecallService
 from serving.rank_service import RankService
+from serving.faiss_client import get_faiss_client
 
 logger = logging.getLogger(__name__)
 
@@ -48,18 +49,22 @@ class IndustrialSkillsCoordinator:
     Provides vector-based retrieval and CTR prediction.
     """
 
-    def __init__(self, model: str = None):
+    def __init__(self, model: str = None, feature_store=None, two_tower=None, ranking_model=None, faiss_client=None):
         """
         Initialize the industrial coordinator.
 
         Args:
             model: LLM model name (for LLM-based explanation if needed)
+            feature_store: Optional pre-initialized feature store (for sharing state)
+            two_tower: Optional pre-initialized TwoTower model
+            ranking_model: Optional pre-initialized Ranking model
+            faiss_client: Optional pre-initialized FAISS client
         """
         self.config = get_config()
         self.model = model or self.config.llm.model
 
-        # Initialize feature store
-        self.feature_store = create_feature_store(self.config)
+        # Initialize feature store (use provided or create new)
+        self.feature_store = feature_store if feature_store is not None else create_feature_store(self.config)
         self.user_features = UserFeatures(self.feature_store)
         self.item_features = ItemFeatures(self.feature_store)
         self.cross_features = CrossFeatures(
@@ -67,13 +72,25 @@ class IndustrialSkillsCoordinator:
             self.item_features
         )
 
-        # Initialize models
-        self.two_tower = TwoTowerModel(self.config)
-        self.ranking_model = RankingModel(self.config)
+        # Initialize models (use provided or create new)
+        self.two_tower = two_tower if two_tower is not None else TwoTowerModel(self.config)
+        self.ranking_model = ranking_model if ranking_model is not None else RankingModel(self.config)
 
-        # Initialize services
-        self.recall_service = RecallService(self.config)
-        self.rank_service = RankService(self.config)
+        # Initialize FAISS client (use provided or create new)
+        self.faiss_client = faiss_client if faiss_client is not None else get_faiss_client(self.config.recall.faiss)
+
+        # Initialize services with shared components
+        self.recall_service = RecallService(
+            self.config,
+            feature_store=self.feature_store,
+            two_tower=self.two_tower,
+            faiss_client=self.faiss_client
+        )
+        self.rank_service = RankService(
+            self.config,
+            feature_store=self.feature_store,
+            ranking_model=self.ranking_model
+        )
 
         logger.info("IndustrialSkillsCoordinator initialized")
 
