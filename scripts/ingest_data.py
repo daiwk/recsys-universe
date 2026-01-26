@@ -304,7 +304,8 @@ def generate_item_embeddings(
 
     # Build FAISS index
     logger.info("Building FAISS index...")
-    faiss.build_index(valid_item_ids, embeddings)
+    faiss.connect()
+    faiss.create_collection_with_embeddings(valid_item_ids, embeddings)
     logger.info(f"FAISS index built with {len(valid_item_ids)} items")
 
     return valid_item_ids, embeddings
