@@ -1,7 +1,28 @@
-langgraph>=0.1.5
+# Core dependencies
 openai>=1.40.0
 pandas>=2.0.0
 scikit-learn>=1.4.0
 requests>=2.31.0
 typing_extensions>=4.8.0
 
+# Industrial recommendation system dependencies
+# PyTorch (optional, for GPU-accelerated model training)
+torch>=2.0.0
+
+# Vector search
+pymilvus>=2.3.0
+faiss-cpu>=1.7.0  # Fallback vector search
+
+# Feature storage
+redis>=5.0.0
+hbase-thrift>=0.20.0  # Optional, for HBase integration
+
+# Online learning (optional)
+kafka-python>=2.0.0  # For Kafka streaming
+
+# API serving
+# Already covered by stdlib http.server
+
+# Development & testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
