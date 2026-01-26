@@ -89,7 +89,7 @@ class IndustrialSkillsCoordinator:
         self,
         user_id: int,
         query: str = None,
-        use_industrial: bool = None
+        industrial: bool = None
     ) -> List[Dict[str, Any]]:
         """
         Main method to run the recommendation process.
@@ -97,22 +97,22 @@ class IndustrialSkillsCoordinator:
         Args:
             user_id: ID of the user to recommend movies for
             query: Natural language query describing preferences (optional)
-            use_industrial: Whether to use industrial pipeline (defaults to config)
+            industrial: Whether to use industrial pipeline (defaults to config)
 
         Returns:
             List of recommended movies with reasons and scores
         """
         self._validate_input(user_id, query)
 
-        if use_industrial is None:
-            use_industrial = self.config.architecture_mode == "industrial"
+        if industrial is None:
+            industrial = self.config.architecture_mode == "industrial"
 
         logger.info(
             f"Starting recommendation for user_id={user_id}, "
-            f"use_industrial={use_industrial}"
+            f"industrial={industrial}"
         )
 
-        if use_industrial:
+        if industrial:
             return self._run_industrial_pipeline(user_id)
         else:
             return self._run_legacy_pipeline(user_id, query)

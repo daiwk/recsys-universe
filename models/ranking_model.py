@@ -32,7 +32,7 @@ class DNNRanker(nn.Module if HAS_TORCH else object):
             config: RankingConfig
         """
         super().__init__()
-        ranking = config.ranking
+        ranking = config.model.ranking
 
         self.hidden_dims = ranking.dnn_layers
         self.activation = ranking.activation
