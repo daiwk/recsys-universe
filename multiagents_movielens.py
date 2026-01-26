@@ -57,9 +57,9 @@ def run_recommendation(
     logger.info(f"开始推荐，user_id={user_id}, industrial={industrial}")
 
     if industrial:
-        # Industrial pipeline: use Skills framework with industrial recall/rank
-        from skills_coordinator import SkillsCoordinator
-        coordinator = SkillsCoordinator(model=config.llm.model)
+        # Industrial pipeline: use IndustrialSkillsCoordinator
+        from industrial_coordinator import IndustrialSkillsCoordinator
+        coordinator = IndustrialSkillsCoordinator()
         return coordinator.run_recommendation(user_id, query)
     else:
         # Legacy pipeline (TF-IDF + LLM)
@@ -216,8 +216,8 @@ if __name__ == "__main__":
     # Parse arguments
     if len(sys.argv) > 1:
         if sys.argv[1] == "--industrial":
-            # Force industrial mode
-            demo_run(industrial=True)
+            # Force industrial mode (uses demo_industrial_only which imports data)
+            demo_industrial_only()
         elif sys.argv[1] == "--legacy":
             # Force legacy mode
             demo_run(industrial=False)
