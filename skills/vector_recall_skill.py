@@ -1,6 +1,6 @@
 """
 Vector recall skill for industrial recommendation system.
-Uses Two-Tower model + Milvus for vector-based retrieval.
+Uses Two-Tower model + FAISS for vector-based retrieval.
 """
 import logging
 from typing import Any, Dict, List
@@ -15,7 +15,7 @@ class VectorRecallSkill(BaseSkill):
     """
     Skill 1: Vector-based Recall
     - Uses Two-Tower model for embedding generation
-    - Uses Milvus for vector search
+    - Uses FAISS for vector search
     - Returns candidate items with recall scores
     """
 

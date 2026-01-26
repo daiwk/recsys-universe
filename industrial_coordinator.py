@@ -15,7 +15,6 @@ from models.two_tower import TwoTowerModel
 from models.ranking_model import RankingModel
 from serving.recall_service import RecallService
 from serving.rank_service import RankService
-from serving.milvus_client import MilvusClient
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +232,7 @@ class IndustrialSkillsCoordinator:
 
     def build_index(self, item_ids: List[int]) -> bool:
         """
-        Build the Milvus index for items.
+        Build the FAISS index for items.
 
         Args:
             item_ids: List of item IDs to index

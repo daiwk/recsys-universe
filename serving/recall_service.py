@@ -1,6 +1,6 @@
 """
 Recall service for industrial recommendation system.
-Handles vector-based retrieval using Two-Tower model and Milvus.
+Handles vector-based retrieval using Two-Tower model and FAISS.
 """
 import logging
 from typing import Any, Dict, List, Optional, Tuple
@@ -12,7 +12,7 @@ from features.user_features import UserFeatures
 from features.item_features import ItemFeatures
 from features.cross_features import CrossFeatures
 from models.two_tower import TwoTowerModel
-from serving.milvus_client import MilvusClient
+from serving.faiss_client import FaissClient, get_faiss_client
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class RecallService:
     """
     Recall service for vector-based retrieval.
-    Combines Two-Tower model with Milvus vector search.
+    Combines Two-Tower model with FAISS vector search.
     """
 
     def __init__(self, config=None):
@@ -41,32 +41,20 @@ class RecallService:
         # Initialize model
         self.two_tower = TwoTowerModel(self.config)
 
-        # Initialize Milvus client
-        self.milvus = MilvusClient(self.config.recall.milvus)
+        # Initialize FAISS client
+        self.faiss = get_faiss_client(self.config.recall.faiss)
 
         logger.info("RecallService initialized")
 
     def initialize(self) -> bool:
         """
-        Initialize the recall service (connect to Milvus, create indices).
+        Initialize the recall service (build FAISS index).
 
         Returns:
             True if successful
         """
-        # Connect to Milvus
-        if not self.milvus.connect():
-            logger.warning("Failed to connect to Milvus, using mock")
-
-        # Create collection if needed
-        self.milvus.create_collection()
-
-        # Create index
-        self.milvus.create_index()
-
-        # Load collection
-        self.milvus.load_collection()
-
-        logger.info("RecallService initialized successfully")
+        # Connect to FAISS
+        self.faiss.connect()
         return True
 
     def recall(
@@ -80,7 +68,7 @@ class RecallService:
 
         Args:
             user_id: User ID
-            candidate_item_ids: Optional candidate set (uses Milvus if not provided)
+            candidate_item_ids: Optional candidate set (uses FAISS if not provided)
             top_k: Number of items to recall
 
         Returns:
@@ -103,10 +91,10 @@ class RecallService:
         # Get user embedding from Two-Tower model
         user_embedding = self.two_tower.get_user_embedding(user_hash, behavior_hashes)
 
-        # Check if using Milvus or candidate-based
+        # Check if using FAISS or candidate-based
         if candidate_item_ids is None:
-            # Use Milvus for vector search
-            return self._milvus_recall(user_embedding, top_k)
+            # Use FAISS for vector search
+            return self._faiss_recall(user_embedding, top_k)
         else:
             # Use candidate-based recall
             return self._candidate_recall(
@@ -133,13 +121,13 @@ class RecallService:
         hasher = FeatureHasher(num_buckets=self.config.model.two_tower.num_hash_buckets)
         return [hasher.hash(g) for g in genres]
 
-    def _milvus_recall(
+    def _faiss_recall(
         self,
         user_embedding: np.ndarray,
         top_k: int
     ) -> Tuple[List[int], List[float]]:
         """
-        Recall using Milvus vector search.
+        Recall using FAISS vector search.
 
         Args:
             user_embedding: User embedding vector
@@ -148,11 +136,7 @@ class RecallService:
         Returns:
             Tuple of (item_ids, scores)
         """
-        item_ids, distances = self.milvus.search(user_embedding, top_k)
-
-        # Convert distances to similarity scores (for cosine)
-        scores = [1.0 / (1.0 + d) for d in distances]
-
+        item_ids, scores = self.faiss.search(user_embedding, top_k)
         return item_ids, scores
 
     def _candidate_recall(
@@ -210,7 +194,6 @@ class RecallService:
             Tuple of (item_ids, scores)
         """
         # Get popular items from feature store
-        # This is a simplified implementation
         popular_items = self._get_popular_items(top_k)
         scores = [0.5] * len(popular_items)  # Default score for cold start
 
@@ -227,7 +210,7 @@ class RecallService:
             List of popular item IDs
         """
         # Simplified: return first k items
-        # In practice, query Milvus or database for popular items
+        # In practice, query feature store for popular items
         return list(range(1, k + 1))
 
     def build_item_index(
@@ -236,7 +219,7 @@ class RecallService:
         embeddings: Optional[np.ndarray] = None
     ) -> bool:
         """
-        Build item embedding index for Milvus.
+        Build item embedding index for FAISS.
 
         Args:
             item_ids: List of item IDs
@@ -245,7 +228,7 @@ class RecallService:
         Returns:
             True if successful
         """
-        logger.info(f"Building index for {len(item_ids)} items")
+        logger.info(f"Building FAISS index for {len(item_ids)} items")
 
         if embeddings is None:
             # Compute embeddings
@@ -253,9 +236,8 @@ class RecallService:
             hash_ids = [self._get_user_hash(iid) for iid in item_ids]  # Reuse user hash function
             embeddings = self.two_tower.batch_get_item_embeddings(hash_ids, item_hashes)
 
-        # Insert into Milvus
-        genre_hashes_list = [self._get_item_hashes(iid) for iid in item_ids]
-        return self.milvus.insert_item_embeddings(item_ids, embeddings, genre_hashes_list)
+        # Insert into FAISS
+        return self.faiss.create_collection_with_embeddings(item_ids, embeddings)
 
     def update_item_embedding(self, item_id: int, embedding: np.ndarray) -> bool:
         """
@@ -268,9 +250,9 @@ class RecallService:
         Returns:
             True if successful
         """
-        # For real-time updates, typically insert with upsert
-        # Simplified implementation
-        logger.info(f"Updated embedding for item {item_id}")
+        # FAISS doesn't support efficient single-item updates
+        # For production, rebuild index or use ID mapping
+        logger.info(f"Item {item_id} embedding updated (requires index rebuild for full effect)")
         return True
 
     def health_check(self) -> Dict[str, Any]:
@@ -280,9 +262,10 @@ class RecallService:
         Returns:
             Dict with health status
         """
+        faiss_stats = self.faiss.get_index_stats() if hasattr(self.faiss, 'get_index_stats') else {}
         return {
-            "milvus_connected": self.milvus._connected,
-            "milvus_healthy": self.milvus.is_healthy(),
+            "faiss_available": self.faiss.is_available() if hasattr(self.faiss, 'is_available') else False,
+            "faiss_status": faiss_stats,
             "feature_store": "connected",
             "two_tower_model": "loaded",
         }

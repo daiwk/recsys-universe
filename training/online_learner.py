@@ -391,7 +391,7 @@ class OnlineLearner:
 
     def update_item_embedding(self, item_id: int, embedding: List[float]) -> bool:
         """
-        Update item embedding in cache and Milvus.
+        Update item embedding in cache and FAISS.
 
         Args:
             item_id: Item ID
@@ -402,13 +402,13 @@ class OnlineLearner:
         """
         result = self.feature_store.set_item_embedding(item_id, embedding)
 
-        # Also update Milvus if available
+        # Also update FAISS if available
         try:
-            from serving.milvus_client import MilvusClient
-            milvus = MilvusClient(self.config.recall.milvus)
-            if milvus.connect():
-                milvus.update_item_embedding(item_id, embedding)
+            from serving.faiss_client import get_faiss_client
+            faiss = get_faiss_client(self.config.recall.faiss)
+            if faiss.is_available():
+                faiss.update_item(item_id, embedding)
         except Exception as e:
-            logger.warning(f"Failed to update Milvus: {e}")
+            logger.warning(f"Failed to update FAISS: {e}")
 
         return result

@@ -8,7 +8,7 @@ Multi-Agent Movie Recommendation System
 
 - 数据集：MovieLens-1M（自动下载）
 - Legacy 模式需要 LLM：本地 OpenAI 兼容接口，模型名默认 "Qwen/Qwen3-1.7B"
-- Industrial 模式：双塔模型 + Milvus 向量检索
+- Industrial 模式：双塔模型 + FAISS 向量检索
 
 环境变量：
   - RECSYS_ARCHITECTURE: "legacy" 或 "industrial"（默认）

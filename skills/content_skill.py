@@ -18,7 +18,7 @@ class ContentSkill(BaseSkill):
     """
     Skill 2: Content Retrieval
     - Legacy mode: Uses TF-IDF / BM25 for content matching
-    - Industrial mode: Uses Two-Tower + Milvus for vector recall
+    - Industrial mode: Uses Two-Tower + FAISS for vector recall
     """
 
     def __init__(self, model: str = None):

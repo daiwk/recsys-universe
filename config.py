@@ -135,27 +135,20 @@ class ModelConfig:
 # ================ Vector Search Configuration ================
 
 @dataclass
-class MilvusConfig:
-    """Milvus vector search configuration."""
-    host: str = "localhost"
-    port: int = 19530
-    collection_name: str = "item_embeddings"
-    index_type: str = "IVF_PQ"  # IVF_PQ, HNSW, IVF_FLAT
-    metric_type: str = "COSINE"
-    nlist: int = 10000  # Number of clusters
-    nprobe: int = 16  # Number of clusters to search
+class FaissConfig:
+    """FAISS vector search configuration."""
     dim: int = 32  # Embedding dimension
+    nlist: int = 0  # Number of clusters (0 = use flat index, >0 = use IVF index)
+    metric_type: str = "COSINE"  # COSINE or L2
 
     def __post_init__(self):
-        self.host = os.environ.get("MILVUS_HOST", self.host)
-        self.port = int(os.environ.get("MILVUS_PORT", str(self.port)))
-        self.collection_name = os.environ.get("MILVUS_COLLECTION", self.collection_name)
+        self.nlist = int(os.environ.get("FAISS_NLIST", str(self.nlist)))
 
 
 @dataclass
 class RecallConfig:
     """Recall service configuration."""
-    milvus: MilvusConfig = field(default_factory=MilvusConfig)
+    faiss: FaissConfig = field(default_factory=FaissConfig)
     recall_top_k: int = 100
     approximate_ratio: float = 0.99  # Approximate vs exact search
     batch_size: int = 64

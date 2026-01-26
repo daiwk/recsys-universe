@@ -1,18 +1,17 @@
 """
 Data ingestion script for MovieLens-1M dataset.
-Imports data into Redis and Milvus for the industrial recommendation system.
+Imports data into Redis and FAISS for the industrial recommendation system.
 
 Usage:
-    python scripts/ingest_data.py                    # Use Redis + Milvus
+    python scripts/ingest_data.py                    # Use Redis + FAISS
     python scripts/ingest_data.py --memory           # Use memory store only
-    python scripts/ingest_data.py --rebuild-index    # Rebuild Milvus index only
+    python scripts/ingest_data.py --rebuild-index    # Rebuild FAISS index only
 
 Environment variables:
     RECSYS_USE_MEMORY_STORE=true  # Use memory store instead of Redis
     REDIS_HOST=localhost         # Redis host
     REDIS_PORT=6379              # Redis port
-    MILVUS_HOST=localhost        # Milvus host
-    MILVUS_PORT=19530            # Milvus port
+    FAISS_NLIST=0                # FAISS IVF index nlist (0=Flat)
 """
 import os
 import sys
@@ -31,7 +30,7 @@ from features.base import create_feature_store, MemoryFeatureStore
 from features.user_features import UserFeatures
 from features.item_features import ItemFeatures
 from models.two_tower import TwoTowerModel
-from serving.milvus_client import MilvusClient
+from serving.faiss_client import FaissClient, get_faiss_client
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -255,9 +254,9 @@ def generate_item_embeddings(
     data: Dict[str, Any],
     two_tower: TwoTowerModel,
     item_features: ItemFeatures,
-    milvus: MilvusClient
+    faiss: FaissClient
 ):
-    """Generate and store item embeddings, build Milvus index."""
+    """Generate and store item embeddings, build FAISS index."""
     logger.info("Generating item embeddings...")
 
     item_ids = list(data['items'].keys())
@@ -303,11 +302,10 @@ def generate_item_embeddings(
     embeddings = np.array(embeddings, dtype=np.float32)
     logger.info(f"Generated {len(embeddings)} embeddings with shape {embeddings.shape}")
 
-    # Build Milvus index
-    logger.info("Building Milvus index...")
-    milvus.connect()
-    milvus.create_collection_with_embeddings(valid_item_ids, embeddings)
-    logger.info(f"Milvus index built with {len(valid_item_ids)} items")
+    # Build FAISS index
+    logger.info("Building FAISS index...")
+    faiss.build_index(valid_item_ids, embeddings)
+    logger.info(f"FAISS index built with {len(valid_item_ids)} items")
 
     return valid_item_ids, embeddings
 
@@ -352,10 +350,10 @@ def build_user_embeddings(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Ingest MovieLens data into Redis and Milvus")
+    parser = argparse.ArgumentParser(description="Ingest MovieLens data into Redis and FAISS")
     parser.add_argument("--data-path", type=str, help="Path to MovieLens data directory")
     parser.add_argument("--memory", action="store_true", help="Use memory store instead of Redis")
-    parser.add_argument("--rebuild-index", action="store_true", help="Rebuild Milvus index only")
+    parser.add_argument("--rebuild-index", action="store_true", help="Rebuild FAISS index only")
     parser.add_argument("--skip-redis", action="store_true", help="Skip Redis ingestion")
     args = parser.parse_args()
 
@@ -363,7 +361,7 @@ def main():
     use_memory = args.memory or os.environ.get("RECSYS_USE_MEMORY_STORE", "").lower() in ("true", "1", "yes")
 
     if use_memory:
-        logger.info("Running in memory store mode (no Redis/Milvus required)")
+        logger.info("Running in memory store mode (no Redis/FAISS required)")
         # Only run if we have the data
         data_path = args.data_path or os.environ.get("MOVIELENS_PATH", "ml-1m")
         if not Path(data_path).exists():
@@ -396,12 +394,12 @@ def main():
     item_features = ItemFeatures(feature_store)
 
     if args.rebuild_index:
-        # Only rebuild Milvus index
-        logger.info("Rebuilding Milvus index only...")
+        # Only rebuild FAISS index
+        logger.info("Rebuilding FAISS index only...")
         two_tower = TwoTowerModel(config)
 
-        milvus = MilvusClient(config.recall.milvus)
-        generate_item_embeddings(data, two_tower, item_features, milvus)
+        faiss = get_faiss_client(config.recall.faiss)
+        generate_item_embeddings(data, two_tower, item_features, faiss)
         logger.info("Index rebuild complete!")
         return
 
@@ -409,20 +407,20 @@ def main():
     if not args.skip_redis and not use_memory:
         ingest_to_redis(data, feature_store, user_features, item_features)
 
-    # Generate item embeddings and build Milvus index
+    # Generate item embeddings and build FAISS index
     if not use_memory:
         logger.info("Initializing Two-Tower model...")
         two_tower = TwoTowerModel(config)
 
-        logger.info("Initializing Milvus...")
-        milvus = MilvusClient(config.recall.milvus)
+        logger.info("Initializing FAISS...")
+        faiss = get_faiss_client(config.recall.faiss)
 
-        generate_item_embeddings(data, two_tower, item_features, milvus)
+        generate_item_embeddings(data, two_tower, item_features, faiss)
 
         # Pre-compute user embeddings
         build_user_embeddings(data, two_tower, user_features)
     else:
-        logger.info("Skipping Milvus (memory mode)")
+        logger.info("Skipping FAISS (memory mode)")
 
     logger.info("=" * 50)
     logger.info("Data ingestion complete!")

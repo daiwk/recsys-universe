@@ -16,7 +16,7 @@
 │  └─────────┘    └──────────┘    └─────────┘    └───────┘       │
 │                                                                 │
 │  Legacy模式: TF-IDF召回 → 协同过滤 → LLM生成                      │
-│  Industrial模式: 向量召回(双塔+Milvus) → 精排(DNN+CTR)           │
+│  Industrial模式: 向量召回(双塔+FAISS) → 精排(DNN+CTR)           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -29,8 +29,8 @@ pip install -r requirements.txt
 
 # 可选依赖
 pip install torch          # GPU 加速
-pip install pymilvus       # Milvus 向量检索
-pip install redis          # Redis 特征存储
+pip install faiss-cpu      # FAISS 向量检索 (纯Python，无需外部服务)
+pip install redis          # Redis 特征存储 (需要 redis-server)
 ```
 
 ### 2. 下载 MovieLens 数据集
@@ -51,18 +51,16 @@ unzip ml-1m.zip -d .
 
 根据运行环境选择以下方式之一：
 
-#### 方式 A: 完整服务 (Redis + Milvus)
+#### 方式 A: 完整服务 (Redis + FAISS)
 
-需要先启动 Redis 和 Milvus 服务：
+需要先启动 Redis 服务：
 
 ```bash
 # 启动 Redis (默认端口 6379)
 redis-server
 
-# 启动 Milvus (默认端口 19530)
-# 可以使用 Docker: docker run -d --name milvus-standalone ...
-
-# 导入数据到 Redis + Milvus
+# FAISS 是纯 Python 库，无需外部服务
+# 导入数据到 Redis + FAISS
 export MOVIELENS_PATH=./ml-1m
 python scripts/ingest_data.py
 ```
@@ -70,7 +68,7 @@ python scripts/ingest_data.py
 #### 方式 B: 内存模式 (无需外部服务)
 
 ```bash
-# 使用内存存储模式，不需要 Redis/Milvus
+# 使用内存存储模式，不需要 Redis/FAISS
 export MOVIELENS_PATH=./ml-1m
 python scripts/ingest_data.py --memory
 ```
@@ -127,8 +125,7 @@ python serving/api_server.py --port 8080
 | `OPENAI_BASE_URL` | `http://localhost:8000/v1` | LLM 服务地址 |
 | `REDIS_HOST` | `localhost` | Redis 地址 |
 | `REDIS_PORT` | `6379` | Redis 端口 |
-| `MILVUS_HOST` | `localhost` | Milvus 地址 |
-| `MILVUS_PORT` | `19530` | Milvus 端口 |
+| `FAISS_NLIST` | `0` | FAISS IVF 索引聚类数 (0=Flat) |
 
 ## 项目结构
 
@@ -159,7 +156,7 @@ recsys-universe/
 │   └── cross_features.py        # 交叉特征
 │
 ├── serving/                     # 在线服务
-│   ├── milvus_client.py         # Milvus 客户端
+│   ├── faiss_client.py          # FAISS 客户端
 │   ├── recall_service.py        # 召回服务
 │   ├── rank_service.py          # 排序服务
 │   └── api_server.py            # HTTP API
@@ -176,13 +173,13 @@ recsys-universe/
 ### ingest_data.py - 数据导入
 
 ```bash
-# 导入到 Redis + Milvus
+# 导入到 Redis + FAISS
 python scripts/ingest_data.py
 
 # 使用内存存储模式
 python scripts/ingest_data.py --memory
 
-# 仅重建 Milvus 索引
+# 仅重建 FAISS 索引
 python scripts/ingest_data.py --rebuild-index
 
 # 指定数据路径
@@ -195,7 +192,7 @@ python scripts/ingest_data.py --data-path /path/to/ml-1m
 |------|--------|------------|
 | 召回方式 | TF-IDF 文本匹配 | 向量相似度检索 |
 | 排序 | 协同过滤启发式 | DNN CTR 预测 |
-| 外部依赖 | LLM 服务 | Redis + Milvus |
+| 外部依赖 | LLM 服务 | Redis + FAISS |
 | 推荐理由 | LLM 生成 | CTR 分数 |
 | ID 规模 | 万级 | 亿级 (Hash 桶) |
 | 推理延迟 | 高 (LLM 延迟) | 低 (< 50ms) |

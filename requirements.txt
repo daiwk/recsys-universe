@@ -9,9 +9,8 @@ typing_extensions>=4.8.0
 # PyTorch (optional, for GPU-accelerated model training)
 torch>=2.0.0
 
-# Vector search
-pymilvus>=2.3.0
-faiss-cpu>=1.7.0  # Fallback vector search
+# Vector search (FAISS - pure Python, no external server needed)
+faiss-cpu>=1.7.0
 
 # Feature storage
 redis>=5.0.0
