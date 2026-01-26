@@ -61,6 +61,7 @@ class DNNRanker(nn.Module if HAS_TORCH else object):
     def forward(self, x: np.ndarray) -> np.ndarray:
         """
         Forward pass for numpy implementation.
+        Works with or without PyTorch installed.
 
         Args:
             x: Input tensor [batch_size, input_dim]
@@ -68,9 +69,7 @@ class DNNRanker(nn.Module if HAS_TORCH else object):
         Returns:
             Output tensor [batch_size, output_dim]
         """
-        if HAS_TORCH:
-            raise NotImplementedError("Use torch tensor input for PyTorch")
-
+        # Use numpy weights for numpy input (works regardless of PyTorch availability)
         for i, (w, b) in enumerate(zip(self.weights, self.biases)):
             x = np.matmul(x, w) + b
             if i < len(self.weights) - 1:
