@@ -1,13 +1,28 @@
 # recsys-universe
 
-基于 Claude-style Skills 架构的多智能体电影推荐系统 Demo。
+基于 Claude-style Skills 架构的多智能体电影推荐系统 Demo，支持两种架构模式：
 
-## 功能特点
+1. **Legacy (TF-IDF)**: 基于 TF-IDF 内容检索的传统 Skills 架构
+2. **Industrial (推荐系统)**: 基于双塔召回 + 精排的工业级架构
 
-- **Claude-style Skills 架构**: 使用 Skills 替代传统 LangGraph 编排
-- **多智能体协作**: Planner、Profile、Content、Collab、Merge、Final 六个专业技能
-- **本地 LLM 支持**: 兼容 OpenAI 接口，支持本地 VLLM 部署（Qwen3-1.7B）
-- **中文 Prompt**: 全流程中文交互，丰富的调试日志
+## 架构概览
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    推荐系统架构 (Industrial)                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
+│  │   用户特征    │    │   模型层      │    │   服务层      │       │
+│  │  (Redis)     │───>│  双塔召回模型  │───>│  Milvus 检索  │       │
+│  │              │    │  精排排序模型  │    │   API 服务    │       │
+│  └──────────────┘    └──────────────┘    └──────────────┘       │
+│                                                                 │
+│  召回流程: User Tower → Item Tower → Milvus ANN Search          │
+│  排序流程: Cross Features → DNN Ranking → CTR Prediction        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ## 快速开始
 
@@ -15,74 +30,158 @@
 
 ```bash
 pip install -r requirements.txt
+
+# 可选依赖
+pip install torch          # GPU 加速模型训练
+pip install pymilvus       # Milvus 向量检索
+pip install redis          # Redis 特征存储
 ```
 
 ### 2. 配置环境变量
 
 ```bash
+# 工业级模式配置
+export RECSYS_ARCHITECTURE=industrial
+
+# Legacy 模式需要 LLM
 export OPENAI_API_KEY="your_api_key"
 export OPENAI_BASE_URL="http://localhost:8000/v1"
-export RECSYS_DEBUG="false"  # 可选，设为 "true" 开启调试模式
+export RECSYS_DEBUG="false"
 ```
 
-### 3. 启动 VLLM 服务
+### 3. 运行
+
+**Legacy 模式 (TF-IDF + LLM):**
+```bash
+python multiagents_movielens.py --legacy
+```
+
+**Industrial 模式 (双塔 + 精排):**
+```bash
+python multiagents_movielens.py --industrial
+```
+
+**纯工业级演示:**
+```bash
+python multiagents_movielens.py --demo-industrial
+```
+
+### 4. API 服务
 
 ```bash
-./run_server.sh
+python serving/api_server.py --port 8080
 ```
 
-### 4. 运行示例
-
-```python
-from multiagents_movielens import run_recommendation
-
-# 基本调用
-recommendations = run_recommendation(
-    user_id=123,
-    query="我想看一点黑暗风格的科幻片，最好有一点赛博朋克的味道"
-)
-
-# 遍历结果
-for movie in recommendations:
-    print(f"{movie['title']} - {movie['reason']}")
-```
+支持 API:
+- `GET /health` - 健康检查
+- `POST /recall` - 向量召回
+- `POST /rank` - 排序
+- `POST /recommend` - 召回 + 排序
 
 ## 项目结构
 
 ```
 recsys-universe/
 ├── config.py                    # 统一配置管理
-├── multiagents_movielens.py     # 主入口
-├── skills_coordinator.py        # Skills 协调器
-├── skills/
+├── multiagents_movielens.py     # 主入口（支持双架构）
+├── industrial_coordinator.py    # 工业级协调器（新）
+├── skills_coordinator.py        # 传统 Skills 协调器
+│
+├── skills/                      # 传统 Skills
 │   ├── base_skill.py            # BaseSkill 基类
 │   ├── skill_registry.py        # Skill 注册表
 │   ├── planner_skill.py         # 规划调度技能
 │   ├── profile_skill.py         # 用户画像技能
-│   ├── content_skill.py         # 内容检索技能
+│   ├── content_skill.py         # TF-IDF 检索
 │   ├── collab_skill.py          # 协同过滤技能
 │   ├── merge_skill.py           # 候选合并技能
 │   ├── final_skill.py           # 最终推荐技能
-│   └── data_utils.py            # 数据工具函数
-├── tests/                       # 单元测试
-│   ├── test_config.py
-│   ├── test_data_utils.py
-│   └── test_skills_coordinator.py
-└── run_server.sh                # VLLM 启动脚本
+│   └── vector_recall_skill.py   # 向量召回（新）
+│
+├── models/                      # 推荐模型
+│   ├── two_tower.py             # 双塔召回模型
+│   └── ranking_model.py         # 精排模型
+│
+├── features/                    # 特征工程
+│   ├── base.py                  # 特征存储（Redis）
+│   ├── user_features.py         # 用户特征
+│   ├── item_features.py         # 物品特征
+│   └── cross_features.py        # 交叉特征
+│
+├── serving/                     # 在线服务
+│   ├── milvus_client.py         # Milvus 客户端
+│   ├── recall_service.py        # 召回服务
+│   ├── rank_service.py          # 排序服务
+│   └── api_server.py            # HTTP API
+│
+├── training/                    # 在线学习
+│   ├── online_learner.py        # 在线学习模块
+│   └── streaming.py             # 流式处理
+│
+└── tests/                       # 单元测试
 ```
 
 ## 配置说明
 
-所有配置通过 `config.py` 管理，支持环境变量覆盖：
+所有配置通过 `config.py` 管理：
 
 | 配置项 | 环境变量 | 默认值 | 说明 |
 |--------|----------|--------|------|
+| `architecture_mode` | `RECSYS_ARCHITECTURE` | `industrial` | 架构模式 |
 | `debug` | `RECSYS_DEBUG` | `false` | 调试模式 |
-| `max_steps` | - | `10` | 最大规划步数 |
-| `llm.api_key` | `OPENAI_API_KEY` | - | API Key |
-| `llm.base_url` | `OPENAI_BASE_URL` | `http://localhost:8000/v1` | API 地址 |
-| `llm.model` | - | `Qwen/Qwen3-1.7B` | 模型名称 |
-| `llm.temperature` | - | `0.3` | LLM 温度 |
+| `recall.recall_top_k` | - | `100` | 召回数量 |
+| `rank.rank_top_k` | - | `10` | 排序数量 |
+| `model.two_tower.user_embedding_dim` | - | `32` | 用户向量维度 |
+| `model.two_tower.item_embedding_dim` | - | `32` | 物品向量维度 |
+| `model.two_tower.num_hash_buckets` | - | `1000000` | Hash bucket 数 |
+| `milvus.host` | `MILVUS_HOST` | `localhost` | Milvus 地址 |
+| `redis.host` | `REDIS_HOST` | `localhost` | Redis 地址 |
+
+## 工业级架构详解
+
+### 双塔召回 (Two-Tower Retrieval)
+
+```
+User Tower:                    Item Tower:
+┌─────────────────┐           ┌─────────────────┐
+│ ID Features     │           │ ID Features     │
+│ - user_id (Hash)│           │ - item_id (Hash)│
+│ - genres        │           │ - genres        │
+├─────────────────┤           ├─────────────────┤
+│ Embedding Layer │           │ Embedding Layer │
+│ (亿级ID → 64维) │           │ (亿级ID → 64维) │
+├─────────────────┤           ├─────────────────┤
+│ DNN Layers      │           │ DNN Layers      │
+│ (128→64→32)     │           │ (128→64→32)     │
+├─────────────────┤           ├─────────────────┐
+│ User Vector     │           │ Item Vector     │
+│ (32维)          │           │ (32维)          │
+└─────────────────┘           └─────────────────┘
+```
+
+### 精排模型 (Ranking Model)
+
+输入特征:
+- 用户特征 (User Tower Output)
+- 物品特征 (Item Tower Output)
+- 交叉特征 (user-item interactions)
+
+模型结构:
+- DNN (256→128→64→1)
+- 输出: CTR 预测
+
+### 向量检索 (Milvus)
+
+- 索引类型: IVF_PQ (支持亿级向量)
+- 距离度量: COSINE
+- 离线: Item Embeddings → Milvus
+- 在线: User Embedding → Milvus Search → Top-100 Items
+
+### 在线学习
+
+- 实时事件流处理
+- 特征增量更新
+- 模型在线微调
 
 ## 测试
 
@@ -90,15 +189,34 @@ recsys-universe/
 pytest tests/ -v
 ```
 
-## 改进日志
+## 与原系统对比
 
-### v2.0.0 (本次更新)
+| 特性 | Legacy (TF-IDF) | Industrial (双塔+精排) |
+|------|-----------------|----------------------|
+| 召回方式 | TF-IDF 文本匹配 | 向量相似度检索 |
+| 排序 | LLM 生成 | DNN CTR 预测 |
+| ID 规模 | 万级 | 亿级 |
+| 推理延迟 | 高 (LLM) | 低 |
+| 在线学习 | 不支持 | 支持 |
+| 冷启动 | 差 | 一般 |
 
-- 新增统一配置管理 (`config.py`)
-- 重构 LLM 客户端，支持连接缓存和复用
-- 优化 Skills 协调器，使用动态调度替代 if-elif 链
-- 改进数据工具层，添加缓存管理和 lru_cache
-- 添加输入验证和类型检查
-- 完善单元测试覆盖
-- 移除硬编码的安全隐患
-- 统一使用 logging 模块替代 print
+## 更新日志
+
+### v3.0.0 (工业级架构)
+
+- 新增双塔召回模型 (`models/two_tower.py`)
+- 新增精排模型 (`models/ranking_model.py`)
+- 新增特征存储层 (`features/`) - Redis 实时特征
+- 新增 Milvus 集成 (`serving/milvus_client.py`)
+- 新增召回服务 (`serving/recall_service.py`)
+- 新增排序服务 (`serving/rank_service.py`)
+- 新增 API 服务 (`serving/api_server.py`)
+- 新增在线学习模块 (`training/online_learner.py`)
+- 新增工业级协调器 (`industrial_coordinator.py`)
+- 支持双架构切换 (Legacy / Industrial)
+
+### v2.0.0
+
+- 新增统一配置管理
+- 重构 Skills 协调器
+- 完善单元测试
