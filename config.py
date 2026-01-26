@@ -84,11 +84,11 @@ class TwoTowerConfig:
     num_hash_buckets: int = 1000000
 
     # User tower
-    user_tower_layers: List[int] = field(default_factory=lambda: [128, 64, user_embedding_dim])
+    user_tower_layers: List[int] = field(default_factory=list)
     user_dropout: float = 0.1
 
     # Item tower
-    item_tower_layers: List[int] = field(default_factory=lambda: [128, 64, item_embedding_dim])
+    item_tower_layers: List[int] = field(default_factory=list)
     item_dropout: float = 0.1
 
     # Training
@@ -98,7 +98,7 @@ class TwoTowerConfig:
     margin: float = 0.1  # For triplet loss
 
     def __post_init__(self):
-        # Convert list sizes after embedding_dim is known
+        # Set tower layers after embedding_dim is known
         self.user_tower_layers = [128, 64, self.user_embedding_dim]
         self.item_tower_layers = [128, 64, self.item_embedding_dim]
 
