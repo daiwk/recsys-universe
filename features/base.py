@@ -414,6 +414,10 @@ class ItemFeatureStore:
         basic = self.get_basic_features(item_id)
         return basic.get("genres", [])
 
+    def set_item_embedding(self, item_id: int, embedding: List[float]) -> bool:
+        """Set item embedding for recall."""
+        return self.store.set_item_embedding(item_id, embedding)
+
 
 class MemoryFeatureStore(BaseFeatureStore):
     """
