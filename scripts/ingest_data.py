@@ -287,8 +287,8 @@ def generate_item_embeddings(
             # Hash genres
             genre_hashes = [genre_to_idx.get(g, 0) for g in genres]
 
-            # Generate embedding using numpy fallback
-            embedding = two_tower.get_item_embedding_numpy(item_id_hash, genre_hashes)
+            # Generate embedding
+            embedding = two_tower.get_item_embedding(item_id_hash, genre_hashes)
             embeddings.append(embedding)
 
             # Store embedding in feature store
@@ -341,7 +341,7 @@ def build_user_embeddings(
         genre_hashes = [genre_to_idx.get(g, 0) for g in preferred_genres]
 
         # Generate embedding
-        embedding = two_tower.get_user_embedding_numpy(user_id_hash, genre_hashes)
+        embedding = two_tower.get_user_embedding(user_id_hash, genre_hashes)
 
         # Store in feature store
         user_features.store.set_user_embedding(user_id, embedding.tolist())
