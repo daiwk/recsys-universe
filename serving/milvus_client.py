@@ -320,7 +320,7 @@ class MilvusClient:
         if not self.pymilvus_available:
             # Mock implementation
             return [
-                (list(range(min(top_k, 10)), [1.0 - i * 0.1 for i in range(min(top_k, 10))])
+                (list(range(min(top_k, 10))), [1.0 - i * 0.1 for i in range(min(top_k, 10))])
                 for _ in range(len(query_embeddings))
             ]
 

@@ -142,7 +142,7 @@ class RedisFeatureStore(BaseFeatureStore):
             config: Feature store configuration
         """
         super().__init__(config)
-        self.redis_config = config.redis
+        self.redis_config = config.feature_store.redis
 
         # Try to import redis, handle if not available
         try:
