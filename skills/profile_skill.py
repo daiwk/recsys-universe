@@ -1,9 +1,13 @@
 """
-Profile skill for generating user profiles in the movie recommendation system
+Profile skill for generating user profiles in the movie recommendation system.
 """
+import logging
 from typing import Any, Dict, List
+
 from .base_skill import BaseSkill
 from .data_utils import get_user_history
+
+logger = logging.getLogger(__name__)
 
 
 class ProfileSkill(BaseSkill):
@@ -12,18 +16,31 @@ class ProfileSkill(BaseSkill):
     - Uses get_user_history to retrieve user's movie history
     - Generates Chinese user profile using LLM
     """
-    
+
     def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute the profile generation skill.
-        
+
         Args:
             state: Current state containing user_id
-            
+
         Returns:
             Updated state with user_profile and user_history
+
+        Raises:
+            KeyError: If user_id is missing from state
+            ValueError: If user_id is invalid
         """
-        user_id = state["user_id"]
+        user_id = state.get("user_id")
+
+        if user_id is None:
+            raise KeyError("user_id is required in state for ProfileSkill")
+
+        if not isinstance(user_id, int) or user_id <= 0:
+            raise ValueError(f"Invalid user_id: {user_id}")
+
+        logger.info(f"Generating profile for user_id={user_id}")
+
         history = get_user_history(user_id, n=10)
 
         hist_text_lines = [
@@ -44,8 +61,7 @@ class ProfileSkill(BaseSkill):
             "请根据以上信息，用 3-5 条要点，帮我总结这个用户的电影喜好画像。"
         )
 
-        self.debug_log("PROFILE_SKILL", f"开始生成用户画像，user_id={user_id}, 历史条数={len(history)}")
-
+        logger.debug(f"User {user_id} has {len(history)} history items")
         profile = self.call_llm(system_prompt, user_prompt, tag="PROFILE_SKILL")
 
         return {

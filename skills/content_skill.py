@@ -1,10 +1,15 @@
 """
-Content skill for semantic movie search in the recommendation system
+Content skill for semantic movie search in the recommendation system.
 """
 import json
+import logging
 from typing import Any, Dict, List
+
 from .base_skill import BaseSkill
 from .data_utils import rag_search_movies
+from config import get_config
+
+logger = logging.getLogger(__name__)
 
 
 class ContentSkill(BaseSkill):
@@ -13,19 +18,22 @@ class ContentSkill(BaseSkill):
     - Uses user query + user_profile to generate search queries (in English)
     - Uses rag_search_movies() to find candidate movies
     """
-    
+
     def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute the content retrieval skill.
-        
+
         Args:
             state: Current state containing query and user_profile
-            
+
         Returns:
             Updated state with content_candidates
         """
         query = state.get("query", "") or ""
         user_profile = state.get("user_profile", "") or ""
+        config = get_config()
+
+        logger.info(f"ContentSkill: processing query='{query[:50]}...'")
 
         system_prompt = (
             "你是一个电影搜索查询改写代理。\n"
@@ -47,37 +55,45 @@ class ContentSkill(BaseSkill):
             + "\n\n请按照要求输出 JSON 数组格式的搜索短语。"
         )
 
-        self.debug_log("CONTENT_SKILL", f"开始生成搜索 query，用户 query={query!r}")
-
         raw = self.call_llm(system_prompt, user_prompt, tag="CONTENT_SKILL")
 
-        # Try to parse JSON list
-        try:
-            start = raw.find("[")
-            end = raw.rfind("]")
-            json_str = raw[start : end + 1]
-            queries = json.loads(json_str)
-            if not isinstance(queries, list):
-                raise ValueError("解析结果不是列表")
-            self.debug_log("CONTENT_SKILL", f"解析出的搜索 query 列表={queries}")
-        except Exception as e:
-            self.debug_log("CONTENT_SKILL", f"解析搜索 query 失败，raw={raw[:200]!r}, error={e}")
-            queries = [query] if query else ["popular movies"]
+        # Try to parse JSON list with better error handling
+        queries = self._parse_queries(raw, query)
 
         all_cands: Dict[int, Dict[str, Any]] = {}
         for q in queries:
-            recs = rag_search_movies(q, k=15)
-            self.debug_log(
-                "CONTENT_SKILL",
-                f"基于搜索短语 {q!r} 检索到候选数={len(recs)}",
-            )
-            for rec in recs:
+            results, _ = rag_search_movies(q, k=config.content_top_k)
+            logger.debug(f"Query '{q}' returned {len(results)} results")
+            for rec in results:
                 mid = int(rec["movie_id"])
                 all_cands[mid] = rec
 
-        self.debug_log(
-            "CONTENT_SKILL",
-            f"内容检索总去重候选数={len(all_cands)}（合并所有搜索短语）",
-        )
+        logger.info(f"ContentSkill: {len(all_cands)} unique candidates after merging")
 
         return {"content_candidates": list(all_cands.values())}
+
+    def _parse_queries(self, raw: str, fallback: str) -> List[str]:
+        """
+        Parse JSON array from LLM response.
+
+        Args:
+            raw: Raw LLM response
+            fallback: Fallback query if parsing fails
+
+        Returns:
+            List of query strings
+        """
+        try:
+            start = raw.find("[")
+            end = raw.rfind("]")
+            if start != -1 and end != -1:
+                json_str = raw[start : end + 1]
+                queries = json.loads(json_str)
+                if isinstance(queries, list) and queries:
+                    logger.debug(f"Parsed queries: {queries}")
+                    return queries
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Failed to parse queries: {e}")
+
+        logger.warning(f"Using fallback query: {fallback}")
+        return [fallback] if fallback else ["popular movies"]

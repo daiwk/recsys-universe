@@ -1,8 +1,13 @@
 """
-Merge skill for combining candidate sets in the movie recommendation system
+Merge skill for combining candidate sets in the movie recommendation system.
 """
+import logging
 from typing import Any, Dict, List
+
 from .base_skill import BaseSkill
+from config import get_config
+
+logger = logging.getLogger(__name__)
 
 
 class MergeSkill(BaseSkill):
@@ -11,24 +16,22 @@ class MergeSkill(BaseSkill):
     - Merges content_candidates and collab_candidates
     - Simple sort by "has rating + rating size" and truncate
     """
-    
+
     def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute the merge skill.
-        
+
         Args:
             state: Current state containing content_candidates and collab_candidates
-            
+
         Returns:
             Updated state with merged_candidates
         """
         content = state.get("content_candidates", []) or []
         collab = state.get("collab_candidates", []) or []
+        config = get_config()
 
-        self.debug_log(
-            "MERGE_SKILL",
-            f"准备合并候选：content={len(content)}, collab={len(collab)}",
-        )
+        logger.info(f"MergeSkill: merging {len(content)} content + {len(collab)} collab candidates")
 
         merged: Dict[int, Dict[str, Any]] = {}
 
@@ -57,13 +60,11 @@ class MergeSkill(BaseSkill):
             return (0 if "rating" in x else 1, -float(x.get("rating", 0.0)))
 
         merged_list.sort(key=sort_key)
-        self.debug_log(
-            "MERGE_SKILL",
-            f"候选去重后共 {len(merged_list)} 条，示例前 3 条={[(m['title'], m.get('rating')) for m in merged_list[:3]]}",
-        )
+        logger.debug(f"After deduplication: {len(merged_list)} candidates")
 
-        # Truncate to first 40 to control prompt length
-        merged_list = merged_list[:40]
-        self.debug_log("MERGE_SKILL", f"截断后保留前 {len(merged_list)} 条候选用于最终决策")
+        # Truncate to configured limit
+        max_candidates = config.merge_top_k
+        merged_list = merged_list[:max_candidates]
+        logger.info(f"MergeSkill: returning top {len(merged_list)} merged candidates")
 
         return {"merged_candidates": merged_list}

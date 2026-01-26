@@ -1,14 +1,19 @@
 """
-Planner skill for coordinating other skills in the movie recommendation system
+Planner skill for coordinating other skills in the movie recommendation system.
 """
 import json
+import logging
 from typing import Any, Dict, List
+
 from .base_skill import BaseSkill
+from config import get_config
+
+logger = logging.getLogger(__name__)
 
 
 class PlannerSkill(BaseSkill):
     """
-    Planner skill (similar to DeepResearch style): 
+    Planner skill (similar to DeepResearch style):
     - Reads current state (what information is ready)
     - Decides which skill to call next:
         - profile_skill
@@ -23,14 +28,23 @@ class PlannerSkill(BaseSkill):
         }
     - Also maintains step_count (limits max steps to prevent infinite loops)
     """
-    
+
+    # Valid next skills that can be returned
+    VALID_SKILLS = frozenset({
+        "profile_skill",
+        "content_skill",
+        "collab_skill",
+        "merge_skill",
+        "final_skill"
+    })
+
     def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute the planning skill.
-        
+
         Args:
             state: Current state of the recommendation process
-            
+
         Returns:
             Updated state with next_skill and planner_reason
         """
@@ -42,18 +56,18 @@ class PlannerSkill(BaseSkill):
         collab_cands = state.get("collab_candidates", []) or []
         merged_cands = state.get("merged_candidates", []) or []
 
+        config = get_config()
         step_count = int(state.get("step_count", 0)) + 1
+        max_steps = config.max_planner_steps
+
+        logger.info(f"PlannerSkill: step {step_count}, deciding next action")
 
         # Prevent infinite loops
-        MAX_STEPS = 8
-        if step_count > MAX_STEPS:
-            self.debug_log(
-                "PLANNER_SKILL",
-                f"step_count={step_count} 超过上限 {MAX_STEPS}，强制切换到 final_skill",
-            )
+        if step_count > max_steps:
+            logger.warning(f"Step count {step_count} exceeds max {max_steps}, forcing final_skill")
             return {
                 "next_skill": "final_skill",
-                "planner_reason": "超过最大规划步数，强制收尾。",
+                "planner_reason": f"超过最大规划步数 ({max_steps})，强制收尾。",
                 "step_count": step_count,
             }
 
@@ -100,44 +114,49 @@ class PlannerSkill(BaseSkill):
             + "\n\n请根据上述信息，输出下一步应该执行的技能以及原因。"
         )
 
-        self.debug_log("PLANNER_SKILL", f"开始规划下一步，state_summary={state_summary}")
-
+        logger.debug(f"PlannerSkill: state_summary = {state_summary}")
         raw = self.call_llm(system_prompt, user_prompt, tag="PLANNER_SKILL")
 
-        # Parse JSON
-        next_skill = "final_skill"
-        reason = "解析失败，直接进入 final_skill。"
+        # Parse JSON with validation
+        next_skill, reason = self._parse_planner_response(raw)
 
-        try:
-            start = raw.find("{")
-            end = raw.rfind("}")
-            json_str = raw[start : end + 1]
-            obj = json.loads(json_str)
-            cand = obj.get("next_skill", "").strip()
-            if cand in {
-                "profile_skill",
-                "content_skill",
-                "collab_skill",
-                "merge_skill",
-                "final_skill",
-            }:
-                next_skill = cand
-            else:
-                self.debug_log(
-                    "PLANNER_SKILL",
-                    f"解析到的 next_skill={cand!r} 不在允许列表中，将 fallback 到 final_skill",
-                )
-            reason = obj.get("reason", reason)
-        except Exception as e:
-            self.debug_log("PLANNER_SKILL", f"解析 planner JSON 失败，raw={raw[:300]!r}, error={e}")
-
-        self.debug_log(
-            "PLANNER_SKILL",
-            f"决策结果：next_skill={next_skill}, reason={reason}, step_count={step_count}",
-        )
+        logger.info(f"PlannerSkill: decided next_skill={next_skill}, reason={reason}")
 
         return {
             "next_skill": next_skill,
             "planner_reason": reason,
             "step_count": step_count,
         }
+
+    def _parse_planner_response(self, raw: str) -> tuple[str, str]:
+        """
+        Parse planner response and validate next_skill.
+
+        Args:
+            raw: Raw LLM response
+
+        Returns:
+            Tuple of (next_skill, reason)
+        """
+        next_skill = "final_skill"
+        reason = "解析失败，直接进入 final_skill。"
+
+        try:
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start != -1 and end != -1:
+                json_str = raw[start : end + 1]
+                obj = json.loads(json_str)
+                cand = obj.get("next_skill", "").strip()
+
+                if cand in self.VALID_SKILLS:
+                    next_skill = cand
+                else:
+                    logger.warning(f"Invalid next_skill '{cand}', defaulting to final_skill")
+
+                reason = obj.get("reason", reason)
+
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Failed to parse planner response: {e}")
+
+        return next_skill, reason
