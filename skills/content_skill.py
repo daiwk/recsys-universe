@@ -1,99 +1,134 @@
 """
-Content skill for semantic movie search in the recommendation system.
+Content skill for vector-based movie retrieval in the recommendation system.
+Uses Two-Tower model + Milvus for industrial-grade recall.
 """
-import json
 import logging
 from typing import Any, Dict, List
 
 from .base_skill import BaseSkill
-from .data_utils import rag_search_movies
-from config import get_config
+from serving.recall_service import RecallService
 
 logger = logging.getLogger(__name__)
 
 
 class ContentSkill(BaseSkill):
     """
-    Skill 2: Content / Semantic Retrieval
-    - Uses user query + user_profile to generate search queries (in English)
-    - Uses rag_search_movies() to find candidate movies
+    Skill 2: Vector-based Content Retrieval (Industrial)
+    - Uses Two-Tower model for embedding generation
+    - Uses Milvus for vector search
+    - Returns candidate items with recall scores
+    """
+
+    def __init__(self, model: str = None):
+        """
+        Initialize content skill with vector recall.
+
+        Args:
+            model: LLM model name (for potential query understanding)
+        """
+        super().__init__(model)
+        self.recall_service = None
+
+    def _get_recall_service(self) -> RecallService:
+        """Get or create recall service."""
+        if self.recall_service is None:
+            from config import get_config
+            config = get_config()
+            self.recall_service = RecallService(config)
+            self.recall_service.initialize()
+        return self.recall_service
+
+    def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute vector-based content retrieval skill.
+
+        Args:
+            state: Current state containing user_id
+
+        Returns:
+            Updated state with content_candidates (recall results)
+        """
+        from config import get_config
+        config = get_config()
+
+        user_id = state.get("user_id")
+        query = state.get("query", "") or ""
+
+        logger.info(f"ContentSkill: vector recall for user_id={user_id}, query='{query[:50]}...'")
+
+        if user_id is None:
+            raise ValueError("user_id is required for ContentSkill")
+
+        service = self._get_recall_service()
+
+        # Perform vector recall
+        top_k = config.content_top_k
+        item_ids, scores = service.recall(user_id, top_k=top_k)
+
+        # Build candidates with item details
+        candidates = []
+        for item_id, score in zip(item_ids, scores):
+            item_basic = service.item_features.store.get_basic_features(item_id)
+            candidates.append({
+                "movie_id": item_id,
+                "recall_score": float(score),
+                "title": item_basic.get("title", f"Item {item_id}"),
+                "genres": item_basic.get("genres", []),
+            })
+
+        logger.info(f"ContentSkill: found {len(candidates)} candidates via vector recall")
+
+        return {"content_candidates": candidates}
+
+
+class ColdStartContentSkill(BaseSkill):
+    """
+    Skill: Cold Start Content Retrieval
+    - Handles new users with no history
+    - Returns popular items as fallback
     """
 
     def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute the content retrieval skill.
+        Execute cold start content retrieval.
 
         Args:
-            state: Current state containing query and user_profile
+            state: Current state
 
         Returns:
-            Updated state with content_candidates
+            Updated state with popular content candidates
         """
-        query = state.get("query", "") or ""
-        user_profile = state.get("user_profile", "") or ""
+        from config import get_config
         config = get_config()
 
-        logger.info(f"ContentSkill: processing query='{query[:50]}...'")
+        user_id = state.get("user_id")
+        logger.info(f"ColdStartContentSkill: handling cold start for user_id={user_id}")
 
-        system_prompt = (
-            "你是一个电影搜索查询改写代理。\n"
-            "已知用户的一段中文画像描述，以及用户当前的中文需求描述（query），\n"
-            "请帮我生成 2-3 个简短的英文搜索短语，用于在电影标题和类型字段上做 TF-IDF / BM25 检索。\n"
-            "例如可以是：\"dark sci-fi thriller\", \"romantic comedy\", \"cyberpunk action\" 等。\n"
-            "要求：\n"
-            "1. 尽量结合用户画像和当前 query 中提到的偏好。\n"
-            "2. 返回必须是 JSON 数组格式，例如：[\"dark sci-fi thriller\", \"time travel movies\" ]，不要包含额外解释。"
-        )
-
-        user_payload = {
-            "user_profile": user_profile,
-            "user_query": query,
-        }
-        user_prompt = (
-            "下面是用户的中文画像和当前需求：\n"
-            + json.dumps(user_payload, ensure_ascii=False, indent=2)
-            + "\n\n请按照要求输出 JSON 数组格式的搜索短语。"
-        )
-
-        raw = self.call_llm(system_prompt, user_prompt, tag="CONTENT_SKILL")
-
-        # Try to parse JSON list with better error handling
-        queries = self._parse_queries(raw, query)
-
-        all_cands: Dict[int, Dict[str, Any]] = {}
-        for q in queries:
-            results, _ = rag_search_movies(q, k=config.content_top_k)
-            logger.debug(f"Query '{q}' returned {len(results)} results")
-            for rec in results:
-                mid = int(rec["movie_id"])
-                all_cands[mid] = rec
-
-        logger.info(f"ContentSkill: {len(all_cands)} unique candidates after merging")
-
-        return {"content_candidates": list(all_cands.values())}
-
-    def _parse_queries(self, raw: str, fallback: str) -> List[str]:
-        """
-        Parse JSON array from LLM response.
-
-        Args:
-            raw: Raw LLM response
-            fallback: Fallback query if parsing fails
-
-        Returns:
-            List of query strings
-        """
+        # Get popular items from recall service
+        service = None
         try:
-            start = raw.find("[")
-            end = raw.rfind("]")
-            if start != -1 and end != -1:
-                json_str = raw[start : end + 1]
-                queries = json.loads(json_str)
-                if isinstance(queries, list) and queries:
-                    logger.debug(f"Parsed queries: {queries}")
-                    return queries
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.warning(f"Failed to parse queries: {e}")
+            if hasattr(self, '_get_recall_service'):
+                service = self._get_recall_service()
+        except Exception:
+            pass
 
-        logger.warning(f"Using fallback query: {fallback}")
-        return [fallback] if fallback else ["popular movies"]
+        if service:
+            popular_items = service._get_popular_items(config.content_top_k)
+        else:
+            popular_items = list(range(1, config.content_top_k + 1))
+
+        candidates = []
+        for rank, item_id in enumerate(popular_items, 1):
+            candidates.append({
+                "movie_id": item_id,
+                "recall_score": 0.5,
+                "title": f"Popular Movie {item_id}",
+                "genres": [],
+            })
+
+        logger.info(f"ColdStartContentSkill: {len(candidates)} popular items")
+
+        return {
+            "content_candidates": candidates,
+            "is_cold_start": True,
+        }
