@@ -12,6 +12,8 @@ from .collab_skill import CollabSkill
 from .merge_skill import MergeSkill
 from .final_skill import FinalSkill
 from .planner_skill import PlannerSkill
+from .vector_recall_skill import VectorRecallSkill
+from .ranking_skill import RankingSkill
 from .skill_registry import SkillRegistry
 
 __all__ = [
@@ -22,5 +24,7 @@ __all__ = [
     'MergeSkill',
     'FinalSkill',
     'PlannerSkill',
+    'VectorRecallSkill',
+    'RankingSkill',
     'SkillRegistry'
 ]

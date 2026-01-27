@@ -13,6 +13,8 @@ from skills import (
     MergeSkill,
     FinalSkill,
     PlannerSkill,
+    VectorRecallSkill,
+    RankingSkill,
     SkillRegistry
 )
 from skills.data_utils import load_movielens, build_movie_tfidf
@@ -57,7 +59,9 @@ class SkillsCoordinator:
         "collab_skill",
         "merge_skill",
         "final_skill",
-        "planner_skill"
+        "planner_skill",
+        "vector_recall_skill",
+        "ranking_skill",
     })
 
     # Mapping of skill names to their class names for dynamic dispatch
@@ -95,6 +99,8 @@ class SkillsCoordinator:
         self.registry.register("merge_skill", MergeSkill)
         self.registry.register("final_skill", FinalSkill)
         self.registry.register("planner_skill", PlannerSkill)
+        self.registry.register("vector_recall_skill", VectorRecallSkill)
+        self.registry.register("ranking_skill", RankingSkill)
 
         logger.info(f"SkillsCoordinator initialized with model={self.model}")
 

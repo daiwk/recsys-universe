@@ -35,7 +35,9 @@ class PlannerSkill(BaseSkill):
         "content_skill",
         "collab_skill",
         "merge_skill",
-        "final_skill"
+        "final_skill",
+        "vector_recall_skill",
+        "ranking_skill",
     })
 
     def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -79,6 +81,8 @@ class PlannerSkill(BaseSkill):
             "content_candidates_len": len(content_cands),
             "collab_candidates_len": len(collab_cands),
             "merged_candidates_len": len(merged_cands),
+            "recall_candidates_len": len(state.get("recall_candidates", [])),
+            "ranked_recommendations_len": len(state.get("ranked_recommendations", [])),
             "step_count": step_count,
         }
 
@@ -90,20 +94,25 @@ class PlannerSkill(BaseSkill):
             "   生成若干英文搜索短语，并调用 TF-IDF 检索得到内容相关的候选电影（content_candidates）。\n"
             "3）collab_skill：根据用户历史记录和全局评分，在用户偏好的类型中挑选高评分但未看过的电影（collab_candidates）。\n"
             "4）merge_skill：将 content_candidates 和 collab_candidates 合并去重，并得到 merged_candidates。\n"
-            "5）final_skill：在有 user_profile 和 merged_candidates 的前提下，\n"
+            "5）vector_recall_skill：使用 Two-Tower 模型生成用户和物品向量，通过 FAISS 检索得到候选电影（recall_candidates）。\n"
+            "6）ranking_skill：使用 DNN 排序模型对 recall_candidates 进行 CTR 预测和排序，生成 ranked_recommendations。\n"
+            "7）final_skill：在有用户画像和候选列表的前提下，\n"
             "   由大模型选择最终要推荐的 5 部电影并给出理由（final_recommendations）。\n\n"
+            "工业级推荐流程：profile_skill -> vector_recall_skill -> ranking_skill -> final_skill\n"
+            "传统推荐流程：profile_skill -> content_skill + collab_skill -> merge_skill -> final_skill\n\n"
             "你的任务：\n"
-            "  - 根据当前状态（state_summary），决定下一步应该调用哪一个技能，\n"
-            "    或者直接调用 final_skill 收尾。\n"
-            "  - 一般流程建议是：优先确保有 user_profile -> 再补全候选（content + collab）-> merge -> 最后 final_skill。\n"
-            "  - 但是如果已经有足够多的候选，或者步骤过多，也可以提前进入 final_skill。\n"
+            "  - 根据当前状态（state_summary），决定下一步应该调用哪一个技能。\n"
+            "  - 如果 recall_candidates 存在但 ranked_recommendations 为空，应该调用 ranking_skill。\n"
+            "  - 如果已经有 ranked_recommendations，可以直接调用 final_skill。\n"
+            "  - 步骤过多时强制进入 final_skill。\n"
             "  - 你只能在如下集合中选择一个 next_skill：\n"
-            "      [\"profile_skill\", \"content_skill\", \"collab_skill\", \"merge_skill\", \"final_skill\"]。\n\n"
+            "      [\"profile_skill\", \"content_skill\", \"collab_skill\", \"merge_skill\",\n"
+            "       \"vector_recall_skill\", \"ranking_skill\", \"final_skill\"]。\n\n"
             "输出要求（非常重要）：\n"
             "  - 只能输出一个 JSON 对象，不要带其它文本。\n"
             "  - JSON 格式如下：\n"
             "    {\n"
-            "      \"next_skill\": \"profile_skill\" 或 \"content_skill\" 或 \"collab_skill\" 或 \"merge_skill\" 或 \"final_skill\",\n"
+            "      \"next_skill\": \"profile_skill\" 或 \"content_skill\" 或 \"collab_skill\" 或 \"merge_skill\" 或 \"vector_recall_skill\" 或 \"ranking_skill\" 或 \"final_skill\",\n"
             "      \"reason\": \"用中文简要说明你做这个选择的原因\"\n"
             "    }"
         )
