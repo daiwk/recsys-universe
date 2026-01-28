@@ -24,9 +24,12 @@ kafka-python>=2.0.0  # For Kafka streaming
 
 # Foundation RL dependencies
 # verl framework support (https://github.com/volcengine/verl)
+# Install verl from GitHub: pip install git+https://github.com/volcengine/verl.git
+verl @ git+https://github.com/volcengine/verl.git
 transformers>=4.40.0
 peft>=0.11.0
 accelerate>=0.30.0
+tensordict>=0.3.0
 
 # Distributed training
 ray[default]>=2.20.0
