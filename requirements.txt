@@ -22,6 +22,20 @@ kafka-python>=2.0.0  # For Kafka streaming
 # API serving
 # Already covered by stdlib http.server
 
+# Foundation RL dependencies
+# verl framework support (https://github.com/volcengine/verl)
+transformers>=4.40.0
+peft>=0.11.0
+accelerate>=0.30.0
+
+# Distributed training
+ray[default]>=2.20.0
+
+# Model serving
+vllm>=0.5.0
+deepspeed>=0.14.0
+
 # Development & testing
 pytest>=7.4.0
 pytest-cov>=4.1.0
+pytest-mock>=3.12.0
